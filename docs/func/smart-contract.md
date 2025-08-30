@@ -1,41 +1,37 @@
-# Avanguard Index Project Summary and Solidity Contract Overview
+# Avanguard Index Project and Solidity Contract Summary
 
 ## Project Summary
-Avanguard Index is a decentralized blockchain platform built on Avalanche that enables anyone to create, manage, and invest in cryptocurrency index funds. Each fund is a basket of selected tokens, initially with equal weightings per token for MVP simplicity. Fund creators assign a unique ticker symbol to the fund’s own token which represents ownership shares. The value of these fund tokens reflects the real-time combined value of the underlying assets fetched via an integrated price oracle. Investors can easily buy and sell these fund tokens, paying a small fee on each transaction that rewards fund creators, supports platform treasury, and funds buyback-and-burn of the platform’s governance token (AGI). This system brings transparent, automated, and accessible crypto fund management to users while rewarding quality fund creators and supporting platform sustainability.
+Avanguard Index is a decentralized crypto index fund platform built on Avalanche. It allows anyone to create and invest in index funds composed of baskets of tokens with equal weight in the MVP. Users buy fund tokens using AVAX; the contract swaps AVAX to underlying tokens on a DEX while deducting a 1% fee. Fund tokens represent ownership shares backed by the underlying assets held securely in the contract vault. When selling, fund tokens are burned, underlying tokens are swapped back to AVAX, fees deducted, and remaining AVAX returned to the user. The platform charges fees that reward fund creators, support buyback and burn of the platform’s AGI token, and sustain protocol development. Price oracles provide live token valuations ensuring transparency and fairness.
+
+## Solidity Contract Functions
+
+### AGI Token Contract (ERC-20)
+- `constructor()`: Fixed 1 billion AGI supply, no minting after deployment.
+- Standard ERC-20 functions: `transfer()`, `approve()`, `transferFrom()`, `balanceOf()`, `totalSupply()`.
+
+### Fund Factory Contract
+- `createFund(string fundName, string fundTicker, address[] tokens)`: Creates fund, burns 1000 AGI fee.
+- `getFund(uint fundId)`: Receive fund metadata and address.
+
+### Fund Contract
+- `buy() payable`: Accept AVAX, deduct 1% fee, swap remaining AVAX equally to underlying tokens on DEX, hold tokens in contract, mint and transfer fund tokens.
+- `sell(uint256 fundTokenAmount)`: Burn fund tokens, calculate proportional underlying tokens, swap them to AVAX on DEX, deduct 1% fee from AVAX, transfer AVAX to user.
+- `getCurrentFundValue()`: Compute total fund value using oracle prices.
+- `fundTokenBalanceOf(address)`: Return user fund token balance.
+
+### Fee Distribution
+- Internal logic to split 1% AVAX fee: 50% to fund creator, 25% to AGI buyback/burn, 25% to protocol treasury.
+
+### Oracle Interface
+- `getPrice(address token)`: Fetch live token price.
+
+### Access Control
+- `onlyCreator` modifier.
+- Ownership transfer functions.
+
+### Events
+- `FundCreated()`, `FundTokenBought()`, `FundTokenSold()`, `FeesDistributed()`.
 
 ---
 
-## Key Solidity Contract Functions
-
-### 1. AGI Token Contract (ERC-20)
-- `constructor()`: Deploy fixed supply (1 billion) AGI tokens, no minting post-deployment.
-- `transfer()`, `approve()`, `transferFrom()`: Standard ERC-20 token functionality.
-- `balanceOf()`, `totalSupply()`: Token balance queries.
-
-### 2. Fund Factory Contract
-- `createFund(string fundName, string fundTicker, address[] tokens)`: Creates a new fund with equal weights for tokens; burns 1000 AGI tokens from creator as fee.
-- `getFund(uint256 fundId)`: Fetches fund metadata and address.
-
-### 3. Fund Contract
-- `buy(uint256 amount)`: Allows investors to deposit underlying tokens proportionally to buy fund tokens; applies 1% fee distributed to creator, treasury, and buyback burn.
-- `sell(uint256 fundTokenAmount)`: Allows redemption of underlying tokens by selling fund tokens with 1% fee.
-- `getCurrentFundValue()`: Computes up-to-date fund valuation using oracle prices.
-- `fundTokenBalanceOf(address investor)`: Returns shares owned by investor.
-
-### 4. Fee Distribution
-- Internal logic to split 1% buy/sell fee: 50% creator reward, 25% buyback and burn AGI, 25% to treasury.
-- `distributeFees(uint256 feeAmount)`: Handles distribution.
-
-### 5. Oracle Interface
-- `getPrice(address token)`: Fetches current token prices for fund valuation.
-
-### 6. Access Control
-- `onlyCreator` modifier to restrict sensitive operations to fund creator.
-- Ownership transfer functionality if needed.
-
-### 7. Events
-- `FundCreated()`, `FundTokenBought()`, `FundTokenSold()`, `FeesDistributed()` for transparency and frontend integration.
-
----
-
-This comprehensive framework facilitates transparent, automated crypto index funds with decentralized governance and incentivization mechanisms.
+This design ensures seamless, transparent, and secure user interaction with on-chain index funds while aligning incentives for creators and maintaining protocol sustainability.

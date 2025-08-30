@@ -3,12 +3,11 @@ import { DeployFunction } from "hardhat-deploy/types";
 import { Contract } from "ethers";
 
 /**
- * Deploys a contract named "YourContract" using the deployer account and
- * constructor arguments set to the deployer address
+ * Deploys the Avanguard Index contracts
  *
  * @param hre HardhatRuntimeEnvironment object.
  */
-const deployYourContract: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
+const deployAvanguardIndex: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   /*
     On localhost, the deployer account is the one that comes with Hardhat, which is already funded.
 
@@ -22,23 +21,78 @@ const deployYourContract: DeployFunction = async function (hre: HardhatRuntimeEn
   const { deployer } = await hre.getNamedAccounts();
   const { deploy } = hre.deployments;
 
-  await deploy("YourContract", {
+  console.log("🚀 Deploying Avanguard Index contracts...");
+
+  // Deploy AGI Token
+  console.log("📝 Deploying AGI Token...");
+  const agiToken = await deploy("AGIToken", {
     from: deployer,
-    // Contract constructor arguments
     args: [deployer],
     log: true,
-    // autoMine: can be passed to the deploy function to make the deployment process faster on local networks by
-    // automatically mining the contract deployment transaction. There is no effect on live networks.
     autoMine: true,
   });
 
-  // Get the deployed contract to interact with it after deploying.
-  const yourContract = await hre.ethers.getContract<Contract>("YourContract", deployer);
-  console.log("👋 Initial greeting:", await yourContract.greeting());
+  // Deploy Mock Oracle
+  console.log("🔮 Deploying Mock Oracle...");
+  const mockOracle = await deploy("MockOracle", {
+    from: deployer,
+    args: [],
+    log: true,
+    autoMine: true,
+  });
+
+  // Deploy Fund Factory
+  console.log("🏭 Deploying Fund Factory...");
+  const fundFactory = await deploy("FundFactory", {
+    from: deployer,
+    args: [agiToken.address, mockOracle.address, deployer, deployer],
+    log: true,
+    autoMine: true,
+  });
+
+  // Deploy some mock tokens for testing
+  console.log("🪙 Deploying Mock Tokens...");
+  const mockUSDC = await deploy("MockERC20", {
+    from: deployer,
+    args: ["USD Coin", "USDC", deployer],
+    log: true,
+    autoMine: true,
+  });
+
+  const mockUSDT = await deploy("MockERC20", {
+    from: deployer,
+    args: ["Tether USD", "USDT", deployer],
+    log: true,
+    autoMine: true,
+  });
+
+  const mockWBTC = await deploy("MockERC20", {
+    from: deployer,
+    args: ["Wrapped Bitcoin", "WBTC", deployer],
+    log: true,
+    autoMine: true,
+  });
+
+  // Set some mock prices in the oracle
+  console.log("💰 Setting mock token prices...");
+  const oracleContract = await hre.ethers.getContract<Contract>("MockOracle", deployer);
+  
+  // Set prices in USD with 8 decimals
+  await oracleContract.setTokenPrice(mockUSDC.address, 100000000); // $1.00
+  await oracleContract.setTokenPrice(mockUSDT.address, 100000000); // $1.00
+  await oracleContract.setTokenPrice(mockWBTC.address, 30000000000); // $30,000.00
+
+  console.log("✅ Avanguard Index contracts deployed successfully!");
+  console.log("📊 AGI Token:", agiToken.address);
+  console.log("🔮 Mock Oracle:", mockOracle.address);
+  console.log("🏭 Fund Factory:", fundFactory.address);
+  console.log("🪙 Mock USDC:", mockUSDC.address);
+  console.log("🪙 Mock USDT:", mockUSDT.address);
+  console.log("🪙 Mock WBTC:", mockWBTC.address);
 };
 
-export default deployYourContract;
+export default deployAvanguardIndex;
 
 // Tags are useful if you have multiple deploy files and only want to run one of them.
-// e.g. yarn deploy --tags YourContract
-deployYourContract.tags = ["YourContract"];
+// e.g. yarn deploy --tags AvanguardIndex
+deployAvanguardIndex.tags = ["AvanguardIndex"];
