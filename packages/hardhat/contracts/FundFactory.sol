@@ -17,6 +17,7 @@ contract FundFactory is Ownable {
     AGIToken public agiToken;
     address public oracle;
     address public treasury;
+    address public dex;
     
     // Fund tracking
     Fund[] public funds;
@@ -37,11 +38,13 @@ contract FundFactory is Ownable {
         address _agiToken,
         address _oracle,
         address _treasury,
+        address _dex,
         address initialOwner
     ) Ownable(initialOwner) {
         agiToken = AGIToken(_agiToken);
         oracle = _oracle;
         treasury = _treasury;
+        dex = _dex;
     }
     
     /**
@@ -82,7 +85,8 @@ contract FundFactory is Ownable {
             tokens,
             msg.sender,
             oracle,
-            treasury
+            treasury,
+            dex
         );
         
         // Track the fund
@@ -186,5 +190,14 @@ contract FundFactory is Ownable {
     function updateAgiToken(address newAgiToken) external onlyOwner {
         require(newAgiToken != address(0), "Invalid AGI token address");
         agiToken = AGIToken(newAgiToken);
+    }
+    
+    /**
+     * @dev Update DEX address (only owner)
+     * @param newDex New DEX address
+     */
+    function updateDex(address newDex) external onlyOwner {
+        require(newDex != address(0), "Invalid DEX address");
+        dex = newDex;
     }
 }

@@ -1,10 +1,11 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
-import { AGIToken, MockOracle, FundFactory, Fund, MockERC20 } from "../typechain-types";
+import { AGIToken, MockOracle, FundFactory, Fund, MockERC20, MockDEX } from "../typechain-types";
 
 describe("Avanguard Index", function () {
   let agiToken: AGIToken;
   let mockOracle: MockOracle;
+  let mockDex: MockDEX;
   let fundFactory: FundFactory;
   let mockUSDC: MockERC20;
   let mockUSDT: MockERC20;
@@ -28,12 +29,18 @@ describe("Avanguard Index", function () {
     mockOracle = (await MockOracleFactory.deploy()) as MockOracle;
     await mockOracle.waitForDeployment();
 
+    // Deploy Mock DEX
+    const MockDEXFactory = await ethers.getContractFactory("MockDEX");
+    mockDex = (await MockDEXFactory.deploy(await mockOracle.getAddress())) as MockDEX;
+    await mockDex.waitForDeployment();
+
     // Deploy Fund Factory
     const FundFactoryFactory = await ethers.getContractFactory("FundFactory");
     fundFactory = (await FundFactoryFactory.deploy(
       await agiToken.getAddress(),
       await mockOracle.getAddress(),
       owner.address,
+      await mockDex.getAddress(),
       owner.address
     )) as FundFactory;
     await fundFactory.waitForDeployment();
@@ -157,6 +164,18 @@ describe("Avanguard Index", function () {
       const fundValue = await testFund.getCurrentFundValue();
       expect(fundValue).to.be.gt(0);
     });
+
+    it("Should track token balances correctly", async function () {
+      const buyAmount = ethers.parseEther("1");
+      await testFund.connect(user2).buy({ value: buyAmount });
+
+      // Check token balances for each underlying token
+      const usdcBalance = await testFund.getTokenBalance(await mockUSDC.getAddress());
+      const usdtBalance = await testFund.getTokenBalance(await mockUSDT.getAddress());
+      
+      expect(usdcBalance).to.be.gt(0);
+      expect(usdtBalance).to.be.gt(0);
+    });
   });
 
   describe("Oracle", function () {
@@ -174,6 +193,20 @@ describe("Avanguard Index", function () {
 
       const updatedPrice = await mockOracle.getPrice(await mockUSDC.getAddress());
       expect(updatedPrice).to.equal(newPrice);
+    });
+  });
+
+  describe("Mock DEX", function () {
+    it("Should calculate expected output amounts", async function () {
+      const amountIn = ethers.parseEther("1");
+      const expectedOutput = await mockDex.getAmountsOut(await mockUSDC.getAddress(), amountIn);
+      expect(expectedOutput).to.be.gt(0);
+    });
+
+    it("Should handle AVAX to token swaps", async function () {
+      const avaxAmount = ethers.parseEther("1");
+      const expectedTokens = await mockDex.getAmountsOut(ethers.ZeroAddress, avaxAmount);
+      expect(expectedTokens).to.equal(avaxAmount); // 1:1 ratio in mock
     });
   });
 });

@@ -41,11 +41,20 @@ const deployAvanguardIndex: DeployFunction = async function (hre: HardhatRuntime
     autoMine: true,
   });
 
+  // Deploy Mock DEX (for testing purposes)
+  console.log("🔄 Deploying Mock DEX...");
+  const mockDex = await deploy("MockDEX", {
+    from: deployer,
+    args: [mockOracle.address],
+    log: true,
+    autoMine: true,
+  });
+
   // Deploy Fund Factory
   console.log("🏭 Deploying Fund Factory...");
   const fundFactory = await deploy("FundFactory", {
     from: deployer,
-    args: [agiToken.address, mockOracle.address, deployer, deployer],
+    args: [agiToken.address, mockOracle.address, deployer, mockDex.address, deployer],
     log: true,
     autoMine: true,
   });
@@ -85,6 +94,7 @@ const deployAvanguardIndex: DeployFunction = async function (hre: HardhatRuntime
   console.log("✅ Avanguard Index contracts deployed successfully!");
   console.log("📊 AGI Token:", agiToken.address);
   console.log("🔮 Mock Oracle:", mockOracle.address);
+  console.log("🔄 Mock DEX:", mockDex.address);
   console.log("🏭 Fund Factory:", fundFactory.address);
   console.log("🪙 Mock USDC:", mockUSDC.address);
   console.log("🪙 Mock USDT:", mockUSDT.address);

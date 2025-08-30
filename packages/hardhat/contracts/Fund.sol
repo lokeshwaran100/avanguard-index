@@ -2,8 +2,10 @@
 pragma solidity >=0.8.0 <0.9.0;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./IOracle.sol";
+import "./IDEX.sol";
 
 /**
  * Fund Contract - Manages individual index funds
@@ -16,6 +18,10 @@ contract Fund is ERC20, Ownable {
     address[] public underlyingTokens;
     address public creator;
     address public oracle;
+    address public dex;
+    
+    // Token balance tracking
+    mapping(address => uint256) public tokenBalances;
     
     // Fee structure (1% = 100 basis points)
     uint256 public constant FEE_BASIS_POINTS = 100; // 1%
@@ -40,7 +46,8 @@ contract Fund is ERC20, Ownable {
         address[] memory _underlyingTokens,
         address _creator,
         address _oracle,
-        address _treasury
+        address _treasury,
+        address _dex
     ) ERC20(_fundName, _fundTicker) Ownable(_creator) {
         fundName = _fundName;
         fundTicker = _fundTicker;
@@ -48,6 +55,7 @@ contract Fund is ERC20, Ownable {
         creator = _creator;
         oracle = _oracle;
         treasury = _treasury;
+        dex = _dex;
         _transferOwnership(_creator);
     }
     
@@ -70,10 +78,63 @@ contract Fund is ERC20, Ownable {
         // Distribute fees
         distributeFees(fee);
         
-        // Simulate buying underlying tokens (in real implementation, this would use DEX)
-        // For now, we just hold the AVAX in the contract
+        // Buy underlying tokens with remaining AVAX
+        buyUnderlyingTokens(remainingAmount);
         
         emit FundTokenBought(msg.sender, msg.value, fundTokensToMint, fee);
+    }
+    
+    /**
+     * @dev Buy underlying tokens with AVAX
+     * @param avaxAmount Amount of AVAX to spend on tokens
+     */
+    function buyUnderlyingTokens(uint256 avaxAmount) internal {
+        require(avaxAmount > 0, "Amount must be greater than 0");
+        require(dex != address(0), "DEX not set");
+        
+        uint256 amountPerToken = avaxAmount / underlyingTokens.length;
+        
+        for (uint256 i = 0; i < underlyingTokens.length; i++) {
+            if (amountPerToken > 0) {
+                // Swap AVAX for the underlying token using DEX
+                uint256 tokensReceived = swapAvaxForTokens(underlyingTokens[i], amountPerToken);
+                tokenBalances[underlyingTokens[i]] += tokensReceived;
+            }
+        }
+    }
+    
+    /**
+     * @dev Sell underlying tokens proportionally based on sell percentage
+     * @param sellPercentage The percentage of fund tokens being sold (18 decimals)
+     * @return totalAvaxReceived Total AVAX received from all token swaps
+     */
+    function sellUnderlyingTokens(uint256 sellPercentage) internal returns (uint256 totalAvaxReceived) {
+        require(dex != address(0), "DEX not set");
+        require(sellPercentage > 0, "Sell percentage must be greater than 0");
+        
+        totalAvaxReceived = 0;
+        
+        // Sell each underlying token proportionally
+        for (uint256 i = 0; i < underlyingTokens.length; i++) {
+            address token = underlyingTokens[i];
+            uint256 tokenBalance = tokenBalances[token];
+            
+            if (tokenBalance > 0) {
+                // Calculate how much of this token to sell based on the sell percentage
+                uint256 tokensToSell = (tokenBalance * sellPercentage) / 1e18;
+                
+                if (tokensToSell > 0) {
+                    // Swap tokens for AVAX using DEX
+                    uint256 avaxReceived = swapTokensForAvax(token, tokensToSell);
+                    totalAvaxReceived += avaxReceived;
+                    
+                    // Update token balance
+                    tokenBalances[token] -= tokensToSell;
+                }
+            }
+        }
+        
+        return totalAvaxReceived;
     }
     
     /**
@@ -83,16 +144,18 @@ contract Fund is ERC20, Ownable {
     function sell(uint256 fundTokenAmount) external {
         require(fundTokenAmount > 0, "Amount must be greater than 0");
         require(balanceOf(msg.sender) >= fundTokenAmount, "Insufficient fund tokens");
+        require(totalSupply() > 0, "No fund tokens in circulation");
         
-        // Simulate selling underlying tokens (in real implementation, this would use DEX)
+        // Calculate the percentage of fund tokens being sold
+        uint256 sellPercentage = (fundTokenAmount * 1e18) / totalSupply(); // 18 decimals for precision
         
-        // Calculate AVAX value of fund tokens
-        uint256 avaxValue = calculateAvaxValue(fundTokenAmount);
-        require(avaxValue > 0, "No value to return");
+        // Sell underlying tokens proportionally and get total AVAX received
+        uint256 totalAvaxReceived = sellUnderlyingTokens(sellPercentage);
+        require(totalAvaxReceived > 0, "No value to return");
         
-        // Calculate fee
-        uint256 fee = (avaxValue * FEE_BASIS_POINTS) / BASIS_POINTS_DENOMINATOR;
-        uint256 avaxToReturn = avaxValue - fee;
+        // Calculate fee (1%)
+        uint256 fee = (totalAvaxReceived * FEE_BASIS_POINTS) / BASIS_POINTS_DENOMINATOR;
+        uint256 avaxToReturn = totalAvaxReceived - fee;
         
         // Burn fund tokens
         _burn(msg.sender, fundTokenAmount);
@@ -108,6 +171,55 @@ contract Fund is ERC20, Ownable {
     }
     
     /**
+     * @dev Swap tokens for AVAX using DEX
+     * @param token The token address to swap
+     * @param amount The amount of tokens to swap
+     * @return avaxReceived The amount of AVAX received
+     */
+    function swapTokensForAvax(address token, uint256 amount) internal returns (uint256 avaxReceived) {
+        require(dex != address(0), "DEX not set");
+        require(amount > 0, "Amount must be greater than 0");
+        
+        // Get the expected AVAX output from DEX
+        uint256 expectedAvax = IDEX(dex).getAmountsOut(token, amount);
+        require(expectedAvax > 0, "No AVAX value for tokens");
+        
+        // In a real implementation, this would:
+        // 1. Approve the DEX to spend the tokens: IERC20(token).approve(dex, amount)
+        // 2. Call the DEX swap function: IDEX(dex).swapExactTokensForAVAX(token, amount, expectedAvax, address(this), block.timestamp)
+        // 3. Handle the actual token transfer and AVAX receipt
+        
+        // For now, we'll simulate the swap by returning the expected value
+        // The actual DEX integration would be implemented here
+        avaxReceived = expectedAvax;
+        
+        return avaxReceived;
+    }
+    
+    /**
+     * @dev Swap AVAX for tokens using DEX
+     * @param token The token address to receive
+     * @param avaxAmount The amount of AVAX to swap
+     * @return tokensReceived The amount of tokens received
+     */
+    function swapAvaxForTokens(address token, uint256 avaxAmount) internal returns (uint256 tokensReceived) {
+        require(dex != address(0), "DEX not set");
+        require(avaxAmount > 0, "Amount must be greater than 0");
+        
+        // Get the expected token output from DEX
+        uint256 expectedTokens = IDEX(dex).getAmountsOut(address(0), avaxAmount);
+        require(expectedTokens > 0, "No token value for AVAX");
+        
+        // Call the DEX swap function with AVAX value
+        // Note: In a real implementation, this would require the contract to have AVAX balance
+        // For now, we'll simulate the swap by returning the expected value
+        // The actual DEX integration would be: IDEX(dex).swapExactAVAXForTokens{value: avaxAmount}(token, expectedTokens, address(this), block.timestamp)
+        tokensReceived = expectedTokens;
+        
+        return tokensReceived;
+    }
+    
+    /**
      * @dev Get current fund value in AVAX
      * @return Total fund value in AVAX
      */
@@ -116,10 +228,25 @@ contract Fund is ERC20, Ownable {
         
         uint256 totalValue = 0;
         for (uint256 i = 0; i < underlyingTokens.length; i++) {
-            uint256 tokenPrice = IOracle(oracle).getPrice(underlyingTokens[i]);
-            // In real implementation, you'd get actual token balances
-            // For now, we assume equal distribution of AVAX value
-            totalValue += address(this).balance / underlyingTokens.length;
+            address token = underlyingTokens[i];
+            uint256 tokenBalance = tokenBalances[token];
+            
+            if (tokenBalance > 0) {
+                // Convert token balance to AVAX value using oracle prices
+                uint256 tokenPriceUSD = IOracle(oracle).getPrice(token);
+                uint256 avaxPriceUSD = IOracle(oracle).getPrice(address(0));
+                
+                if (tokenPriceUSD > 0 && avaxPriceUSD > 0) {
+                    // Calculate token value in USD
+                    uint256 tokenValueUSD = (tokenBalance * tokenPriceUSD) / 1e8;
+                    // Convert USD value to AVAX
+                    uint256 tokenValueInAvax = (tokenValueUSD * 1e8) / avaxPriceUSD;
+                    totalValue += tokenValueInAvax;
+                } else {
+                    // Fallback: use token balance as AVAX value
+                    totalValue += tokenBalance;
+                }
+            }
         }
         return totalValue;
     }
@@ -133,14 +260,15 @@ contract Fund is ERC20, Ownable {
         
         uint256 totalValueUSD = 0;
         for (uint256 i = 0; i < underlyingTokens.length; i++) {
-            uint256 tokenPriceUSD = IOracle(oracle).getPrice(underlyingTokens[i]);
-            // In real implementation, you'd get actual token balances
-            // For now, we assume equal distribution of AVAX value
-            // Convert AVAX balance to USD value
-            uint256 avaxBalance = address(this).balance / underlyingTokens.length;
-            uint256 avaxPriceUSD = IOracle(oracle).getPrice(address(0));
-            uint256 tokenValueUSD = (avaxBalance * avaxPriceUSD) / 1e8;
-            totalValueUSD += tokenValueUSD;
+            address token = underlyingTokens[i];
+            uint256 tokenBalance = tokenBalances[token];
+            
+            if (tokenBalance > 0) {
+                uint256 tokenPriceUSD = IOracle(oracle).getPrice(token);
+                // Calculate token value in USD
+                uint256 tokenValueUSD = (tokenBalance * tokenPriceUSD) / 1e8;
+                totalValueUSD += tokenValueUSD;
+            }
         }
         return totalValueUSD;
     }
@@ -240,6 +368,24 @@ contract Fund is ERC20, Ownable {
     function updateOracle(address newOracle) external onlyOwner {
         require(newOracle != address(0), "Invalid oracle address");
         oracle = newOracle;
+    }
+    
+    /**
+     * @dev Update DEX address (only owner)
+     * @param newDex New DEX address
+     */
+    function updateDex(address newDex) external onlyOwner {
+        require(newDex != address(0), "Invalid DEX address");
+        dex = newDex;
+    }
+    
+    /**
+     * @dev Get token balance for a specific token
+     * @param token The token address
+     * @return balance The token balance
+     */
+    function getTokenBalance(address token) external view returns (uint256) {
+        return tokenBalances[token];
     }
     
     /**
