@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useRef } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { hardhat } from "viem/chains";
@@ -19,6 +18,18 @@ export const menuLinks: HeaderMenuLink[] = [
   {
     label: "Home",
     href: "/",
+  },
+  {
+    label: "Create",
+    href: "/create",
+  },
+  {
+    label: "Invest",
+    href: "/invest",
+  },
+  {
+    label: "Dashboard",
+    href: "/dashboard",
   },
   {
     label: "Debug Contracts",
@@ -83,11 +94,13 @@ export const Header = () => {
         </details>
         <Link href="/" passHref className="hidden lg:flex items-center gap-2 ml-4 mr-6 shrink-0">
           <div className="flex relative w-10 h-10">
-            <Image alt="SE2 logo" className="cursor-pointer" fill src="/logo.svg" />
+            <div className="w-8 h-8 bg-blue-600 rounded-md flex items-center justify-center">
+              <span className="text-white font-bold text-sm">A</span>
+            </div>
           </div>
           <div className="flex flex-col">
-            <span className="font-bold leading-tight">Scaffold-ETH</span>
-            <span className="text-xs">Ethereum dev stack</span>
+            <span className="font-bold leading-tight">Avaguard Index</span>
+            <span className="text-xs">Decentralized Index Funds</span>
           </div>
         </Link>
         <ul className="hidden lg:flex lg:flex-nowrap menu menu-horizontal px-1 gap-2">

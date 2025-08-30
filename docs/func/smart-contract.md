@@ -32,6 +32,7 @@ Avanguard Index is a decentralized crypto index fund platform built on Avalanche
 ### Events
 - `FundCreated()`, `FundTokenBought()`, `FundTokenSold()`, `FeesDistributed()`.
 
+
 ---
 
 This design ensures seamless, transparent, and secure user interaction with on-chain index funds while aligning incentives for creators and maintaining protocol sustainability.
