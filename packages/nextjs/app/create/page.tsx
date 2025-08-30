@@ -4,13 +4,21 @@ import { useState } from "react";
 import type { NextPage } from "next";
 import { useAccount } from "wagmi";
 import { PlusIcon } from "@heroicons/react/24/outline";
-import { createFund } from "~~/hooks/useSupabase";
+import { getMockTokenAddresses, useAGIToken, useFundFactory } from "~~/hooks/useContracts";
+import { createFund, createFundRecord } from "~~/hooks/useSupabase";
 
 const CreateFund: NextPage = () => {
   const { isConnected, address } = useAccount();
   const [fundName, setFundName] = useState("");
   const [ticker, setTicker] = useState("");
   const [isCreating, setIsCreating] = useState(false);
+
+  // Contract hooks
+  const { createNewFund, isCreatingFund } = useFundFactory();
+  const { agiBalance, agiAllowance, approveAGIForFundCreation, isApprovingAGI } = useAGIToken();
+
+  // Get mock token addresses
+  const mockTokens = getMockTokenAddresses();
   const [tokens, setTokens] = useState([
     { address: "", symbol: "", weight: 20 },
     { address: "", symbol: "", weight: 20 },
@@ -61,22 +69,75 @@ const CreateFund: NextPage = () => {
     setIsCreating(true);
     try {
       const selectedTokens = tokens.filter(token => token.symbol);
-      const result = await createFund(address, fundName, ticker, selectedTokens);
 
-      if (result.success) {
-        alert(`Fund "${fundName}" created successfully!`);
-        // Reset form
-        setFundName("");
-        setTicker("");
-        setTokens([
-          { address: "", symbol: "", weight: 20 },
-          { address: "", symbol: "", weight: 20 },
-          { address: "", symbol: "", weight: 20 },
-          { address: "", symbol: "", weight: 20 },
-          { address: "", symbol: "", weight: 20 },
-        ]);
+      // Check AGI balance and allowance
+      if (agiBalance < 1000) {
+        alert("Insufficient AGI balance. You need 1000 AGI to create a fund.");
+        return;
+      }
+
+      // Check if AGI allowance is sufficient
+      if (agiAllowance < 1000) {
+        alert("Please approve AGI spending first.");
+        const approveResult = await approveAGIForFundCreation();
+        if (!approveResult.success) {
+          alert(`Error approving AGI: ${approveResult.error}`);
+          return;
+        }
+        alert("AGI approved! Please try creating the fund again.");
+        return;
+      }
+
+      // Convert token symbols to addresses
+      const tokenAddresses = selectedTokens.map(token => {
+        const address = mockTokens[token.symbol as keyof typeof mockTokens];
+        if (!address) {
+          throw new Error(`Unknown token: ${token.symbol}`);
+        }
+        return address;
+      });
+
+      // Create fund via smart contract
+      const contractResult = await createNewFund(fundName, ticker, tokenAddresses);
+      console.log("contract result", contractResult);
+
+      if (contractResult.success) {
+        let supabaseResult;
+        if (contractResult.fundAddress && contractResult.fundId !== undefined) {
+          supabaseResult = await createFundRecord(
+            contractResult.fundAddress,
+            contractResult.fundId,
+            address,
+            fundName,
+            ticker,
+            selectedTokens,
+          );
+        } else {
+          // Fallback to mock if event parsing fails
+          supabaseResult = await createFund(address, fundName, ticker, selectedTokens);
+        }
+
+        if (supabaseResult.success) {
+          const finalAddress = contractResult.fundAddress || supabaseResult.fund?.fund_address || "unknown";
+          alert(
+            `Fund "${fundName}" created successfully!\nTransaction: ${contractResult.txHash}\nFund Address: ${finalAddress}`,
+          );
+          // Reset form
+          setFundName("");
+          setTicker("");
+          setTokens([
+            { address: "", symbol: "", weight: 20 },
+            { address: "", symbol: "", weight: 20 },
+            { address: "", symbol: "", weight: 20 },
+            { address: "", symbol: "", weight: 20 },
+            { address: "", symbol: "", weight: 20 },
+          ]);
+        } else {
+          console.log("Fund created on blockchain but database error: ", supabaseResult.error);
+          alert(`Fund created on blockchain but database error: ${supabaseResult.error}`);
+        }
       } else {
-        alert(`Error creating fund: ${result.error}`);
+        alert(`Error creating fund: ${contractResult.error}`);
       }
     } catch (error) {
       console.error("Error creating fund:", error);
@@ -185,11 +246,9 @@ const CreateFund: NextPage = () => {
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="">Select token</option>
-                      <option value="WAVAX">WAVAX</option>
-                      <option value="USDC">USDC</option>
-                      <option value="USDT">USDT</option>
-                      <option value="JOE">JOE</option>
-                      <option value="PNG">PNG</option>
+                      <option value="USDC">USDC (Mock)</option>
+                      <option value="USDT">USDT (Mock)</option>
+                      <option value="WBTC">WBTC (Mock)</option>
                     </select>
                   </div>
 
@@ -222,21 +281,41 @@ const CreateFund: NextPage = () => {
           </div>
         </div>
 
-        {/* Creation Fee */}
-        <div className="mb-8 p-4 bg-blue-50 rounded-lg">
-          <div className="flex justify-between items-center">
-            <span className="font-medium">AGI Creation Fee</span>
-            <span className="text-blue-600 font-bold">0.5%</span>
+        {/* AGI Balance & Creation Fee */}
+        <div className="mb-8 space-y-4">
+          <div className="p-4 bg-gray-50 rounded-lg">
+            <div className="flex justify-between items-center">
+              <span className="font-medium">Your AGI Balance</span>
+              <span className="font-bold">{agiBalance.toFixed(2)} AGI</span>
+            </div>
+          </div>
+
+          <div className="p-4 bg-blue-50 rounded-lg">
+            <div className="flex justify-between items-center">
+              <span className="font-medium">AGI Creation Fee</span>
+              <span className="text-blue-600 font-bold">1000 AGI</span>
+            </div>
+            {agiBalance < 1000 && (
+              <p className="text-red-600 text-sm mt-2">Insufficient AGI balance. You need 1000 AGI to create a fund.</p>
+            )}
           </div>
         </div>
 
         {/* Create Button */}
         <button
           onClick={handleCreateFund}
-          disabled={!fundName || !ticker || tokens.some(t => !t.symbol) || getTotalWeight() !== 100 || isCreating}
+          disabled={
+            !fundName ||
+            !ticker ||
+            tokens.some(t => !t.symbol) ||
+            getTotalWeight() !== 100 ||
+            isCreating ||
+            isCreatingFund ||
+            isApprovingAGI
+          }
           className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white py-3 px-6 rounded-lg font-semibold text-lg transition-colors"
         >
-          {isCreating ? "Creating Fund..." : "Create Fund"}
+          {isCreating || isCreatingFund ? "Creating Fund..." : isApprovingAGI ? "Approving AGI..." : "Create Fund"}
         </button>
       </div>
     </div>
