@@ -1,94 +1,103 @@
-# Avanguard Index Frontend Screens and Supabase Schemas
+# Avanguard Index Project Summary, Frontend Screens, and Supabase Database Schema
 
-The Avanguard Index MVP smart contracts will provide the core decentralized mutual fund functionality on Avalanche testnet by enabling token creation, fund creation with token-weighted indexes, and basic buy/sell functionality with associated fees and tokenomics.
-
-## Frontend Screens
-
-1. **Landing Page**
-   - Overview of Avanguard Index
-   - Call-to-actions for creating funds or investing
-
-2. **Connect Wallet / User Dashboard**
-   - Wallet connection status
-   - AGI token balance display
-   - Overview of user’s created funds and investments
-   - Quick links to create new fund or invest
-
-3. **Create New Fund**
-   - Form to select Avalanche testnet tokens
-   - Input for token weight allocations (sum to 100%)
-   - Estimated AGI creation fee display
-   - Submit button to trigger fund creation transaction
-
-4. **Fund Marketplace**
-   - List of all active funds with key metadata
-   - Filters and search (by creator, performance, tokens)
-   - Fund cards showing fund name, creator, returns, AUM, fees
-
-5. **Fund Detail Page**
-   - Detailed fund info (tokens, weights, creator, fees, creation date)
-   - Current price per fund share
-   - Buy and sell input forms with calculator and fee estimates
-   - User’s current share balance in the fund
-   - Historical fund performance chart (if available)
-
-6. **Buy Fund Shares**
-   - Token amount inputs based on fund weights
-   - Fee and total cost breakdown
-   - Confirm transaction button with wallet interaction
-
-7. **Sell Fund Shares**
-   - Share amount input
-   - Estimated tokens to receive and fee breakdown
-   - Confirm transaction button
-
-8. **Leaderboard (Stretch)**
-   - Top performing funds ranked by ROI or volume
-   - Rewards distributed and fund stats
-
-9. **Admin / Treasury Dashboard (Optional)**
-   - Treasury balance and withdrawal controls (admin only)
-   - Fee distribution overview
+## Project Summary
+Avanguard Index is a decentralized platform on Avalanche that allows anyone to create and invest in cryptocurrency index funds. Each fund consists of a basket of tokens with equal weightings (for MVP), and issues a unique fund token representing ownership. The fund token’s value reflects the live combined value of its underlying assets, updated via a price oracle. Investors can buy and sell fund tokens, paying a small fee that rewards creators, funds buyback and burn of the governance token (AGI), and supports platform development. This platform brings transparency, accountability, and ease-of-use to crypto investing, enabling creators to earn rewards for performance and investors to gain diversified exposure without complex research.
 
 ---
 
-## Supabase Database Schemas
+## Next.js Frontend Screens
+
+### 1. Landing Page
+- Introductory overview and call-to-actions for fund creation and investment.
+
+### 2. Wallet Connect & User Dashboard
+- Wallet connection (MetaMask, WalletConnect)
+- Display user AGI balance, created funds, and investment portfolio overview.
+
+### 3. Fund Creation Page
+- Input fund name and unique ticker.
+- Select tokens from Avalanche testnet.
+- Equal weight assignment display.
+- Show AGI creation fee.
+- Create fund action triggers smart contract interaction.
+
+### 4. Fund Marketplace
+- List active funds with search and filter options.
+- Show fund details like creator, tokens, returns.
+
+### 5. Fund Detail Page
+- Display fund info, composition, and real-time price.
+- Buy and sell fund shares with fee breakdown.
+- Show user’s fund token balance.
+
+### 6. Buy & Sell Confirmation Screens
+- Wallet transaction confirmations, gas fees, and status.
+
+### 7. Leaderboard (Optional)
+- Top funds ranked by performance and volume.
+- Weekly reward distribution display.
+
+### 8. Admin Dashboard (Optional)
+- Treasury overview and withdrawal interface for authorized admins.
+
+---
+
+## Supabase Database Schema
 
 ### Table: `users`
-| Column           | Type          | Description                            |
-|------------------|---------------|--------------------------------------|
-| wallet_address   | Text (PK)     | User’s blockchain wallet address     |
-| created_at       | Timestamp     | Account creation time                 |
-| last_active      | Timestamp     | Last login or transaction time       |
+| Column           | Type          | Description                           |
+|------------------|---------------|-------------------------------------|
+| wallet_address   | Text (PK)     | User’s blockchain wallet address    |
+| created_at       | Timestamp     | Account creation time                |
+| last_active      | Timestamp     | Last activity time                   |
 
 ### Table: `funds`
-| Column           | Type          | Description                           |
-|------------------|---------------|-------------------------------------|
-| id               | UUID          | Primary key                         |
+| Column           | Type          | Description                          |
+|------------------|---------------|------------------------------------|
+| id               | UUID (PK)    | Unique fund identifier               |
 | creator_address  | Text          | Wallet address of fund creator (FK) |
+| name             | Text          | Name of the fund                    |
+| ticker           | Text          | Unique ticker symbol for fund token |
+| creation_date    | Timestamp     | Fund creation timestamp             |
+| agi_burned       | Numeric       | AGI tokens burned at creation       |
 
 ### Table: `fund_tokens`
-| Column           | Type          | Description                           |
-|------------------|---------------|-------------------------------------|
-| id               | UUID          | Primary key                         |
-| fund_id          | UUID          | Foreign key to `funds`               |
+| Column           | Type          | Description                          |
+|------------------|---------------|------------------------------------|
+| id               | UUID (PK)    | Unique record identifier             |
+| fund_id          | UUID (FK)    | Associated fund                     |
+| token_address    | Text          | Address of token in fund             |
+| weight_percentage| Numeric       | Equal weight percentage per token   |
 
 ### Table: `investments`
-| Column           | Type          | Description                           |
-|------------------|---------------|-------------------------------------|
-| id               | UUID          | Primary key                         |
-| user_address     | Text          | Wallet address of investor (FK)      |
-| fund_id          | UUID          | Foreign key to `funds`               |
+| Column           | Type          | Description                          |
+|------------------|---------------|------------------------------------|
+| id               | UUID (PK)    | Unique record identifier             |
+| user_address     | Text (FK)    | Wallet address of investor           |
+| fund_id          | UUID (FK)    | Fund invested in                    |
+| share_balance    | Numeric       | Number of fund tokens owned          |
+| last_updated     | Timestamp     | Last update timestamp                |
 
 ### Table: `transactions`
-| Column           | Type          | Description                           |
-|------------------|---------------|-------------------------------------|
-| id               | UUID          | Primary key                         |
-| user_address     | Text          | Wallet address of investor (FK)      |
-| fund_id          | UUID          | Foreign key to `funds`               |
+| Column           | Type          | Description                          |
+|------------------|---------------|------------------------------------|
+| id               | UUID (PK)    | Unique transaction identifier       |
+| user_address     | Text (FK)    | Wallet address of investor           |
+| fund_id          | UUID (FK)    | Fund involved                      |
+| txn_type         | Text         | 'buy' or 'sell'                     |
+| amount           | Numeric       | Number of shares bought or sold     |
+| fee_paid         | Numeric       | Fee paid in AGI                     |
+| timestamp        | Timestamp     | Timestamp of transaction            |
 
-### Table: `leaderboard`
-| Column           | Type          | Description                           |
-|------------------|---------------|-------------------------------------|
-| id               | UUID          | Primary key                         |
-| fund_id          | UUID          | Foreign key to `funds`               |
+### Table: `leaderboard` (Optional)
+| Column           | Type          | Description                          |
+|------------------|---------------|------------------------------------|
+| id               | UUID (PK)    | Unique record identifier             |
+| fund_id          | UUID (FK)    | Associated fund                     |
+| rank             | Integer      | Fund ranking position                |
+| performance_metric| Numeric       | Performance measurement (ROI, etc.) |
+| last_updated     | Timestamp     | Last update time                    |
+
+---
+
+This combined setup provides a clear user interface flow with robust backend data structures to support the decentralized, tokenized fund investment experience for the Avanguard Index platform.
