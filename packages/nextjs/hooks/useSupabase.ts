@@ -192,8 +192,10 @@ export const useTransactions = (userAddress?: string) => {
   return { transactions, loading, error };
 };
 
-// Function to create a new fund (will be updated to use smart contracts)
-export const createFund = async (
+// Function to create a new fund record in Supabase (called after smart contract creation)
+export const createFundRecord = async (
+  fundAddress: string,
+  fundId: number,
   creatorAddress: string,
   name: string,
   ticker: string,
@@ -207,22 +209,17 @@ export const createFund = async (
 
     if (userError) throw userError;
 
-    // TODO: Replace with actual smart contract call to FundFactory.createFund()
-    // For now, create mock fund with placeholder address
-    const mockFundAddress = `0x${Math.random().toString(16).substr(2, 40)}`;
-    const mockFundId = Math.floor(Math.random() * 1000000);
-
-    // Create the fund record
+    // Create the fund record with actual contract address
     const { data: fundData, error: fundError } = await supabase
       .from("funds")
       .insert({
-        fund_address: mockFundAddress,
-        fund_id: mockFundId,
+        fund_address: fundAddress,
+        fund_id: fundId,
         creator_address: creatorAddress,
         name,
         ticker,
         agi_burned: 1000, // Fixed creation fee
-        underlying_tokens: tokens.map(t => t.symbol), // Store token symbols for now
+        underlying_tokens: tokens.map(t => t.symbol),
       })
       .select()
       .single();
@@ -242,9 +239,23 @@ export const createFund = async (
 
     return { success: true, fund: fundData };
   } catch (error) {
-    console.error("Error creating fund:", error);
+    console.error("Error creating fund record:", error);
     return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
   }
+};
+
+// Legacy function for backward compatibility (now just calls createFundRecord with mock data)
+export const createFund = async (
+  creatorAddress: string,
+  name: string,
+  ticker: string,
+  tokens: { symbol: string; weight: number }[],
+) => {
+  // This is now a fallback - should be replaced by createFundRecord
+  const mockFundAddress = `0x${Math.random().toString(16).substr(2, 40)}`;
+  const mockFundId = Math.floor(Math.random() * 1000000);
+
+  return createFundRecord(mockFundAddress, mockFundId, creatorAddress, name, ticker, tokens);
 };
 
 // Function to invest in a fund (will be updated to use smart contracts)

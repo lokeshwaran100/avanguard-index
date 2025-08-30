@@ -1159,7 +1159,7 @@ const deployedContracts = {
       deployedOnBlock: 5,
     },
     MockERC20: {
-      address: "0x0165878A594ca255338adfa4d48449f69242Eb8F",
+      address: "0x959922bE3CAee4b8Cd9a407cc3ac1C251C2007B1",
       abi: [
         {
           inputs: [
@@ -1610,7 +1610,7 @@ const deployedContracts = {
         renounceOwnership: "@openzeppelin/contracts/access/Ownable.sol",
         transferOwnership: "@openzeppelin/contracts/access/Ownable.sol",
       },
-      deployedOnBlock: 13,
+      deployedOnBlock: 26,
     },
     MockOracle: {
       address: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",

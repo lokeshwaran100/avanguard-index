@@ -5,7 +5,7 @@ import type { NextPage } from "next";
 import { useAccount } from "wagmi";
 import { PlusIcon } from "@heroicons/react/24/outline";
 import { getMockTokenAddresses, useAGIToken, useFundFactory } from "~~/hooks/useContracts";
-import { createFund } from "~~/hooks/useSupabase";
+import { createFund, createFundRecord } from "~~/hooks/useSupabase";
 
 const CreateFund: NextPage = () => {
   const { isConnected, address } = useAccount();
@@ -102,11 +102,26 @@ const CreateFund: NextPage = () => {
       console.log("contract result", contractResult);
 
       if (contractResult.success) {
-        // Also save to Supabase for UI purposes
-        const supabaseResult = await createFund(address, fundName, ticker, selectedTokens);
+        let supabaseResult;
+        if (contractResult.fundAddress && contractResult.fundId !== undefined) {
+          supabaseResult = await createFundRecord(
+            contractResult.fundAddress,
+            contractResult.fundId,
+            address,
+            fundName,
+            ticker,
+            selectedTokens,
+          );
+        } else {
+          // Fallback to mock if event parsing fails
+          supabaseResult = await createFund(address, fundName, ticker, selectedTokens);
+        }
 
         if (supabaseResult.success) {
-          alert(`Fund "${fundName}" created successfully!`);
+          const finalAddress = contractResult.fundAddress || supabaseResult.fund?.fund_address || "unknown";
+          alert(
+            `Fund "${fundName}" created successfully!\nTransaction: ${contractResult.txHash}\nFund Address: ${finalAddress}`,
+          );
           // Reset form
           setFundName("");
           setTicker("");

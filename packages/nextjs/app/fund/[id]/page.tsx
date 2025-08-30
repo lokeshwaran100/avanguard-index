@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useAccount } from "wagmi";
 import { ArrowLeftIcon } from "@heroicons/react/24/outline";
+import { useFundContract } from "~~/hooks/useContracts";
 import { investInFund, useFund } from "~~/hooks/useSupabase";
 
 const FundDetail = (props: any) => {
@@ -16,6 +17,10 @@ const FundDetail = (props: any) => {
 
   // Get real fund data from Supabase using fund address
   const { fund, loading } = useFund(params.id); // params.id is now the fund address
+
+  // Get real contract data using the fund address
+  const { fundTokenBalance, currentFundValue, totalSupply, buyFundTokens, sellFundTokens, isBuyingTokens } =
+    useFundContract(params.id);
 
   if (loading) {
     return (
@@ -48,16 +53,16 @@ const FundDetail = (props: any) => {
     name: fund.name,
     description: `A diversified index fund created by ${fund.creator_address.slice(0, 6)}...`,
     creator: fund.creator_address.slice(0, 6) + "..." + fund.creator_address.slice(-4),
-    tvl: Math.random() * 5000000, // Mock TVL - would calculate from real data
-    currentPrice: 12.34, // Mock price
-    totalSupply: 100000, // Mock supply
-    userBalance: 250.5, // Mock user balance
+    tvl: currentFundValue * totalSupply, // Real TVL calculation
+    currentPrice: totalSupply > 0 ? currentFundValue / totalSupply : 0, // Real price per share
+    totalSupply: totalSupply, // Real total supply from contract
+    userBalance: fundTokenBalance, // Real user balance from contract
     holdings:
       fund.fund_tokens?.map(token => ({
         token: token.token_address,
         allocation: token.weight_percentage,
-        price: Math.random() * 200, // Mock price
-        value: Math.random() * 500000, // Mock value
+        price: Math.random() * 200, // Mock price - would get from oracle
+        value: Math.random() * 500000, // Mock value - would calculate from real data
       })) || [],
     ticker: fund.ticker,
     fundAddress: fund.fund_address,
@@ -71,10 +76,27 @@ const FundDetail = (props: any) => {
 
     setIsInvesting(true);
     try {
-      const result = await investInFund(address, fund.fund_address, parseFloat(amount));
+      let result;
+
+      if (action === "buy") {
+        // Buy fund tokens with AVAX
+        result = await buyFundTokens(amount);
+
+        if (result.success) {
+          // Also record in Supabase for tracking
+          await investInFund(address, fund.fund_address, parseFloat(amount));
+          alert(`Successfully invested ${amount} AVAX!`);
+        }
+      } else {
+        // Sell fund tokens
+        result = await sellFundTokens(amount);
+
+        if (result.success) {
+          alert(`Successfully sold ${amount} fund tokens!`);
+        }
+      }
 
       if (result.success) {
-        alert(`Successfully ${action === "buy" ? "invested" : "sold"} ${amount} shares!`);
         setAmount("");
       } else {
         alert(`Error: ${result.error}`);
@@ -239,12 +261,14 @@ const FundDetail = (props: any) => {
 
                 {/* Amount Input */}
                 <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Amount</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Amount ({action === "buy" ? "AVAX" : "Fund Tokens"})
+                  </label>
                   <input
                     type="number"
                     value={amount}
                     onChange={e => setAmount(e.target.value)}
-                    placeholder="Enter amount"
+                    placeholder={action === "buy" ? "Enter AVAX amount" : "Enter fund tokens to sell"}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -252,7 +276,9 @@ const FundDetail = (props: any) => {
                 {/* Balance */}
                 <div className="mb-4">
                   <p className="text-sm text-gray-600">Your Balance</p>
-                  <p className="font-semibold">{fundData.userBalance} DBCI</p>
+                  <p className="font-semibold">
+                    {fundData.userBalance.toFixed(4)} {fund.ticker}
+                  </p>
                 </div>
 
                 {/* Fee Breakdown */}
@@ -272,14 +298,14 @@ const FundDetail = (props: any) => {
                 {/* Action Button */}
                 <button
                   onClick={handleInvest}
-                  disabled={!amount || parseFloat(amount) <= 0 || isInvesting}
+                  disabled={!amount || parseFloat(amount) <= 0 || isInvesting || isBuyingTokens}
                   className={`w-full py-3 px-4 rounded-lg font-semibold transition-colors ${
                     action === "buy"
                       ? "bg-blue-600 hover:bg-blue-700 text-white disabled:bg-gray-300"
                       : "bg-red-600 hover:bg-red-700 text-white disabled:bg-gray-300"
                   } disabled:cursor-not-allowed`}
                 >
-                  {isInvesting ? "Processing..." : action === "buy" ? "Buy" : "Sell"}
+                  {isInvesting || isBuyingTokens ? "Processing..." : action === "buy" ? "Buy" : "Sell"}
                 </button>
               </>
             )}
