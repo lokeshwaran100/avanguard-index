@@ -88,31 +88,40 @@ describe("Avanguard Index", function () {
       const fundName = "Test Fund";
       const fundTicker = "TEST";
       const tokens = [await mockUSDC.getAddress(), await mockUSDT.getAddress()];
+      const weightages = [5000, 5000]; // 50% each
 
       // Approve AGI tokens for fund creation
       await agiToken.connect(user1).approve(await fundFactory.getAddress(), ethers.parseEther("1000"));
 
       // Create fund
-      await fundFactory.connect(user1).createFund(fundName, fundTicker, tokens);
+      await fundFactory.connect(user1).createFund(fundName, fundTicker, tokens, weightages);
 
       // Check if fund was created
       const fundCount = await fundFactory.getTotalFunds();
       expect(fundCount).to.equal(1);
 
-      const [fundAddress, name, ticker, underlyingTokens] = await fundFactory.getFund(0);
+      const result = await fundFactory.getFund(0);
+      const fundAddress = result[0];
+      const name = result[1];
+      const ticker = result[2];
+      const underlyingTokens = result[3];
+      const fundWeightages = result[4];
+      
       expect(name).to.equal(fundName);
       expect(ticker).to.equal(fundTicker);
       expect(underlyingTokens).to.deep.equal(tokens);
+      expect(fundWeightages).to.deep.equal(weightages);
     });
 
     it("Should require AGI tokens for fund creation", async function () {
       const fundName = "Test Fund";
       const fundTicker = "TEST";
       const tokens = [await mockUSDC.getAddress()];
+      const weightages = [10000]; // 100%
 
       // Try to create fund without approving AGI tokens
       await expect(
-        fundFactory.connect(user2).createFund(fundName, fundTicker, tokens)
+        fundFactory.connect(user2).createFund(fundName, fundTicker, tokens, weightages)
       ).to.be.reverted;
     });
   });
@@ -125,11 +134,13 @@ describe("Avanguard Index", function () {
       const fundName = "Test Fund";
       const fundTicker = "TEST";
       const tokens = [await mockUSDC.getAddress(), await mockUSDT.getAddress()];
+      const weightages = [5000, 5000]; // 50% each
 
       await agiToken.connect(user1).approve(await fundFactory.getAddress(), ethers.parseEther("1000"));
-      await fundFactory.connect(user1).createFund(fundName, fundTicker, tokens);
+      await fundFactory.connect(user1).createFund(fundName, fundTicker, tokens, weightages);
 
-      const [fundAddress] = await fundFactory.getFund(0);
+      const result = await fundFactory.getFund(0);
+      const fundAddress = result[0];
       testFund = await ethers.getContractAt("Fund", fundAddress) as Fund;
     });
 

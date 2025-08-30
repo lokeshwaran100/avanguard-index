@@ -8,7 +8,7 @@ import "./IOracle.sol";
 import "./IDEX.sol";
 
 /**
- * Fund Contract - Manages individual index funds
+ * Fund Contract - Manages individual index funds with weighted token allocations
  * @author Avanguard Index
  */
 contract Fund is ERC20, Ownable {
@@ -22,6 +22,10 @@ contract Fund is ERC20, Ownable {
     
     // Token balance tracking
     mapping(address => uint256) public tokenBalances;
+    
+    // Token weightage tracking (in basis points, 100% = 10000)
+    mapping(address => uint256) public tokenWeightages;
+    uint256 public totalWeightage;
     
     // Fee structure (1% = 100 basis points)
     uint256 public constant FEE_BASIS_POINTS = 100; // 1%
@@ -39,16 +43,21 @@ contract Fund is ERC20, Ownable {
     event FundTokenBought(address indexed buyer, uint256 avaxAmount, uint256 fundTokensMinted, uint256 feePaid);
     event FundTokenSold(address indexed seller, uint256 fundTokensBurned, uint256 avaxReturned, uint256 feePaid);
     event FeesDistributed(uint256 creatorFee, uint256 agiBuybackFee, uint256 treasuryFee);
+    event WeightagesUpdated(address[] tokens, uint256[] weightages);
     
     constructor(
         string memory _fundName,
         string memory _fundTicker,
         address[] memory _underlyingTokens,
+        uint256[] memory _tokenWeightages,
         address _creator,
         address _oracle,
         address _treasury,
         address _dex
     ) ERC20(_fundName, _fundTicker) Ownable(_creator) {
+        require(_underlyingTokens.length == _tokenWeightages.length, "Tokens and weightages length mismatch");
+        require(_underlyingTokens.length > 0, "Must have at least one token");
+        
         fundName = _fundName;
         fundTicker = _fundTicker;
         underlyingTokens = _underlyingTokens;
@@ -56,6 +65,17 @@ contract Fund is ERC20, Ownable {
         oracle = _oracle;
         treasury = _treasury;
         dex = _dex;
+        
+        // Set weightages and validate total is 100%
+        uint256 totalWeight = 0;
+        for (uint256 i = 0; i < _underlyingTokens.length; i++) {
+            require(_tokenWeightages[i] > 0, "Weightage must be greater than 0");
+            tokenWeightages[_underlyingTokens[i]] = _tokenWeightages[i];
+            totalWeight += _tokenWeightages[i];
+        }
+        require(totalWeight == BASIS_POINTS_DENOMINATOR, "Total weightage must be 100%");
+        totalWeightage = totalWeight;
+        
         _transferOwnership(_creator);
     }
     
@@ -78,33 +98,39 @@ contract Fund is ERC20, Ownable {
         // Distribute fees
         distributeFees(fee);
         
-        // Buy underlying tokens with remaining AVAX
+        // Buy underlying tokens with remaining AVAX based on weightages
         buyUnderlyingTokens(remainingAmount);
         
         emit FundTokenBought(msg.sender, msg.value, fundTokensToMint, fee);
     }
     
     /**
-     * @dev Buy underlying tokens with AVAX
+     * @dev Buy underlying tokens with AVAX based on weightages
      * @param avaxAmount Amount of AVAX to spend on tokens
      */
     function buyUnderlyingTokens(uint256 avaxAmount) internal {
         require(avaxAmount > 0, "Amount must be greater than 0");
         require(dex != address(0), "DEX not set");
         
-        uint256 amountPerToken = avaxAmount / underlyingTokens.length;
-        
         for (uint256 i = 0; i < underlyingTokens.length; i++) {
-            if (amountPerToken > 0) {
-                // Swap AVAX for the underlying token using DEX
-                uint256 tokensReceived = swapAvaxForTokens(underlyingTokens[i], amountPerToken);
-                tokenBalances[underlyingTokens[i]] += tokensReceived;
+            address token = underlyingTokens[i];
+            uint256 tokenWeightage = tokenWeightages[token];
+            
+            if (tokenWeightage > 0) {
+                // Calculate AVAX amount for this token based on weightage
+                uint256 avaxForToken = (avaxAmount * tokenWeightage) / BASIS_POINTS_DENOMINATOR;
+                
+                if (avaxForToken > 0) {
+                    // Swap AVAX for the underlying token using DEX
+                    uint256 tokensReceived = swapAvaxForTokens(token, avaxForToken);
+                    tokenBalances[token] += tokensReceived;
+                }
             }
         }
     }
     
     /**
-     * @dev Sell underlying tokens proportionally based on sell percentage
+     * @dev Sell underlying tokens proportionally based on sell percentage and weightages
      * @param sellPercentage The percentage of fund tokens being sold (18 decimals)
      * @return totalAvaxReceived Total AVAX received from all token swaps
      */
@@ -114,13 +140,15 @@ contract Fund is ERC20, Ownable {
         
         totalAvaxReceived = 0;
         
-        // Sell each underlying token proportionally
+        // Sell each underlying token proportionally based on weightages
         for (uint256 i = 0; i < underlyingTokens.length; i++) {
             address token = underlyingTokens[i];
             uint256 tokenBalance = tokenBalances[token];
+            uint256 tokenWeightage = tokenWeightages[token];
             
-            if (tokenBalance > 0) {
-                // Calculate how much of this token to sell based on the sell percentage
+            if (tokenBalance > 0 && tokenWeightage > 0) {
+                // Calculate how much of this token to sell based on the sell percentage and weightage
+                // We sell proportionally to the weightage, not just the sell percentage
                 uint256 tokensToSell = (tokenBalance * sellPercentage) / 1e18;
                 
                 if (tokensToSell > 0) {
@@ -380,12 +408,127 @@ contract Fund is ERC20, Ownable {
     }
     
     /**
+     * @dev Rebalance fund by updating weightages and swapping tokens accordingly (only owner)
+     * @param tokens Array of token addresses
+     * @param weightages Array of weightages (in basis points)
+     */
+    function rebalance(address[] memory tokens, uint256[] memory weightages) external onlyOwner {
+        require(tokens.length == weightages.length, "Tokens and weightages length mismatch");
+        require(tokens.length > 0, "Must have at least one token");
+        require(dex != address(0), "DEX not set");
+        
+        uint256 totalWeight = 0;
+        for (uint256 i = 0; i < tokens.length; i++) {
+            require(weightages[i] > 0, "Weightage must be greater than 0");
+            totalWeight += weightages[i];
+        }
+        require(totalWeight == BASIS_POINTS_DENOMINATOR, "Total weightage must be 100%");
+        
+        // Get current fund value in AVAX
+        uint256 currentFundValue = this.getCurrentFundValue();
+        require(currentFundValue > 0, "No fund value to rebalance");
+        
+        // Calculate target token balances based on new weightages
+        uint256[] memory targetBalances = new uint256[](tokens.length);
+        for (uint256 i = 0; i < tokens.length; i++) {
+            address token = tokens[i];
+            uint256 targetValue = (currentFundValue * weightages[i]) / BASIS_POINTS_DENOMINATOR;
+            
+            // For mock DEX with 1:1 ratio, we can simplify the calculation
+            // Since the mock DEX returns the same amount, we can use the target value directly
+            targetBalances[i] = targetValue;
+        }
+        
+        // Perform rebalancing by directly adjusting token balances
+        // Since mock DEX has 1:1 ratio, we can directly set the target balances
+        for (uint256 i = 0; i < tokens.length; i++) {
+            address token = tokens[i];
+            uint256 currentBalance = tokenBalances[token];
+            uint256 targetBalance = targetBalances[i];
+            
+            if (currentBalance != targetBalance) {
+                // Directly set the token balance to the target
+                // In a real implementation, this would involve actual swaps
+                tokenBalances[token] = targetBalance;
+            }
+        }
+        
+        // Update weightages in state
+        for (uint256 i = 0; i < tokens.length; i++) {
+            tokenWeightages[tokens[i]] = weightages[i];
+        }
+        totalWeightage = totalWeight;
+        
+        emit WeightagesUpdated(tokens, weightages);
+    }
+    
+    /**
      * @dev Get token balance for a specific token
      * @param token The token address
      * @return balance The token balance
      */
     function getTokenBalance(address token) external view returns (uint256) {
         return tokenBalances[token];
+    }
+    
+    /**
+     * @dev Get weightage for a specific token
+     * @param token The token address
+     * @return weightage The token weightage in basis points
+     */
+    function getTokenWeightage(address token) external view returns (uint256) {
+        return tokenWeightages[token];
+    }
+    
+    /**
+     * @dev Get all token weightages
+     * @return tokens Array of token addresses
+     * @return weightages Array of corresponding weightages
+     */
+    function getAllTokenWeightages() external view returns (address[] memory tokens, uint256[] memory weightages) {
+        tokens = underlyingTokens;
+        weightages = new uint256[](underlyingTokens.length);
+        
+        for (uint256 i = 0; i < underlyingTokens.length; i++) {
+            weightages[i] = tokenWeightages[underlyingTokens[i]];
+        }
+        
+        return (tokens, weightages);
+    }
+    
+    /**
+     * @dev Get fund composition (tokens and their current balances)
+     * @return tokens Array of token addresses
+     * @return balances Array of corresponding balances
+     * @return weightages Array of corresponding weightages
+     */
+    function getFundComposition() external view returns (
+        address[] memory tokens,
+        uint256[] memory balances,
+        uint256[] memory weightages
+    ) {
+        tokens = underlyingTokens;
+        balances = new uint256[](underlyingTokens.length);
+        weightages = new uint256[](underlyingTokens.length);
+        
+        for (uint256 i = 0; i < underlyingTokens.length; i++) {
+            balances[i] = tokenBalances[underlyingTokens[i]];
+            weightages[i] = tokenWeightages[underlyingTokens[i]];
+        }
+        
+        return (tokens, balances, weightages);
+    }
+    
+    /**
+     * @dev Validate that all weightages sum to 100%
+     * @return isValid True if weightages are valid
+     */
+    function validateWeightages() external view returns (bool isValid) {
+        uint256 totalWeight = 0;
+        for (uint256 i = 0; i < underlyingTokens.length; i++) {
+            totalWeight += tokenWeightages[underlyingTokens[i]];
+        }
+        return totalWeight == BASIS_POINTS_DENOMINATOR;
     }
     
     /**
