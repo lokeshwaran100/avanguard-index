@@ -14,17 +14,19 @@ export interface User {
 }
 
 export interface Fund {
-  id: string;
+  fund_address: string; // Contract address (PK)
+  fund_id: number; // ID from FundFactory
   creator_address: string;
   name: string;
   ticker: string;
   creation_date?: string;
   agi_burned?: number;
+  underlying_tokens?: string[]; // Array of token addresses
 }
 
 export interface FundToken {
   id: string;
-  fund_id: string;
+  fund_address: string; // References fund contract address
   token_address: string;
   weight_percentage: number;
 }
@@ -32,7 +34,7 @@ export interface FundToken {
 export interface Investment {
   id: string;
   user_address: string;
-  fund_id: string;
+  fund_address: string; // References fund contract address
   share_balance?: number;
   last_updated?: string;
 }
@@ -40,7 +42,7 @@ export interface Investment {
 export interface Transaction {
   id: string;
   user_address: string;
-  fund_id: string;
+  fund_address: string; // References fund contract address
   txn_type: "buy" | "sell";
   amount: number;
   fee_paid?: number;
@@ -49,7 +51,7 @@ export interface Transaction {
 
 export interface Leaderboard {
   id: string;
-  fund_id: string;
+  fund_address: string; // References fund contract address
   rank?: number;
   performance_metric?: number;
   last_updated?: string;

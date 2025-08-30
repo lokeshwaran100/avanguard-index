@@ -14,8 +14,8 @@ const FundDetail = (props: any) => {
   const [action, setAction] = useState("buy");
   const [isInvesting, setIsInvesting] = useState(false);
 
-  // Get real fund data from Supabase
-  const { fund, loading } = useFund(params.id);
+  // Get real fund data from Supabase using fund address
+  const { fund, loading } = useFund(params.id); // params.id is now the fund address
 
   if (loading) {
     return (
@@ -44,7 +44,7 @@ const FundDetail = (props: any) => {
 
   // Transform real data for display
   const fundData = {
-    id: fund.id,
+    id: fund.fund_address,
     name: fund.name,
     description: `A diversified index fund created by ${fund.creator_address.slice(0, 6)}...`,
     creator: fund.creator_address.slice(0, 6) + "..." + fund.creator_address.slice(-4),
@@ -60,6 +60,7 @@ const FundDetail = (props: any) => {
         value: Math.random() * 500000, // Mock value
       })) || [],
     ticker: fund.ticker,
+    fundAddress: fund.fund_address,
   };
 
   const estimatedFees = parseFloat(amount) * 0.01 || 0;
@@ -70,7 +71,7 @@ const FundDetail = (props: any) => {
 
     setIsInvesting(true);
     try {
-      const result = await investInFund(address, fund.id, parseFloat(amount));
+      const result = await investInFund(address, fund.fund_address, parseFloat(amount));
 
       if (result.success) {
         alert(`Successfully ${action === "buy" ? "invested" : "sold"} ${amount} shares!`);
