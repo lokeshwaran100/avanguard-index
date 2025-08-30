@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import type { NextPage } from "next";
 import { MagnifyingGlassIcon } from "@heroicons/react/24/outline";
+import { useFunds } from "~~/hooks/useSupabase";
 
 const Invest: NextPage = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -11,8 +12,26 @@ const Invest: NextPage = () => {
   const [category, setCategory] = useState("all");
   const [riskLevel, setRiskLevel] = useState("all");
 
-  // Mock data - replace with real data from contracts/API
-  const funds = [
+  // Get real funds data from Supabase
+  const { funds: realFunds, loading } = useFunds();
+
+  // Transform real data to match UI expectations (with mock performance data for now)
+  const funds = realFunds.map(fund => ({
+    id: fund.id,
+    name: fund.name,
+    creator: fund.creator_address.slice(0, 6) + "..." + fund.creator_address.slice(-4),
+    category: "DeFi", // This could be derived from fund tokens or stored separately
+    riskLevel: "Medium Risk", // This could be calculated based on token volatility
+    yearReturn: Math.random() * 300 - 100, // Mock performance data
+    assets: fund.fund_tokens?.map(token => token.token_address) || [],
+    apy: Math.random() * 25,
+    tvl: Math.random() * 5000000,
+    description: `A diversified index fund created by ${fund.creator_address.slice(0, 6)}...`,
+    ticker: fund.ticker,
+  }));
+
+  // Keep original mock data as fallback for demo
+  const mockFunds = [
     {
       id: 1,
       name: "DeFi Blue Chip Index",
@@ -87,7 +106,21 @@ const Invest: NextPage = () => {
     },
   ];
 
-  const filteredFunds = funds.filter(fund => {
+  // Use real funds if available, otherwise fallback to mock data
+  const displayFunds = realFunds.length > 0 ? funds : mockFunds;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading funds...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const filteredFunds = displayFunds.filter(fund => {
     const matchesSearch =
       fund.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       fund.creator.toLowerCase().includes(searchTerm.toLowerCase());

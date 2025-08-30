@@ -4,36 +4,46 @@ import { useState } from "react";
 import Link from "next/link";
 import type { NextPage } from "next";
 import { useAccount } from "wagmi";
+import { useUserFunds, useUserInvestments } from "~~/hooks/useSupabase";
 
 const Dashboard: NextPage = () => {
-  const { isConnected } = useAccount();
+  const { isConnected, address } = useAccount();
   const [timeframe, setTimeframe] = useState("1W");
 
-  // Mock data - replace with real data from contracts/API
+  // Get real data from Supabase
+  const { funds: createdFunds } = useUserFunds(address);
+  const { investments } = useUserInvestments(address);
+
+  // Calculate portfolio data from real investments
   const portfolioData = {
-    totalValue: 15234.56,
-    agiBalance: 1234.56,
-    totalPL: 1849.12,
-    plPercentage: 2.5,
+    totalValue: investments.reduce((sum, inv) => sum + (inv.share_balance || 0) * 12.34, 0), // Mock price
+    agiBalance: 1234.56, // This would come from wallet/contract
+    totalPL: investments.reduce((sum, inv) => sum + (inv.share_balance || 0) * 0.5, 0), // Mock P/L
+    plPercentage: 2.5, // Mock percentage
   };
 
+  // Transform data for display
   const myFunds = [
-    {
-      name: "My First Fund",
-      type: "Created",
-      value: 10000.0,
-      change24h: 1.2,
-      totalPL: 1500.0,
-      status: "active",
-    },
-    {
-      name: "Tech Index Fund",
-      type: "Invested",
-      value: 5000.0,
-      change24h: -0.5,
-      totalPL: 400.0,
-      status: "active",
-    },
+    ...createdFunds.map(fund => ({
+      id: fund.id,
+      name: fund.name,
+      type: "Created" as const,
+      value: Math.random() * 20000, // Mock value - would calculate from TVL
+      change24h: Math.random() * 4 - 2, // Mock 24h change
+      totalPL: Math.random() * 2000, // Mock P/L
+      status: "active" as const,
+      ticker: fund.ticker,
+    })),
+    ...investments.map(inv => ({
+      id: inv.fund?.id || "",
+      name: inv.fund?.name || "Unknown Fund",
+      type: "Invested" as const,
+      value: (inv.share_balance || 0) * 12.34, // Mock price per share
+      change24h: Math.random() * 4 - 2, // Mock 24h change
+      totalPL: (inv.share_balance || 0) * 0.5, // Mock P/L
+      status: "active" as const,
+      ticker: inv.fund?.ticker || "",
+    })),
   ];
 
   if (!isConnected) {

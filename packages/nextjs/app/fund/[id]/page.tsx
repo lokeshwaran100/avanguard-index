@@ -4,35 +4,87 @@ import { useState } from "react";
 import Link from "next/link";
 import { useAccount } from "wagmi";
 import { ArrowLeftIcon } from "@heroicons/react/24/outline";
+import { investInFund, useFund } from "~~/hooks/useSupabase";
 
 const FundDetail = (props: any) => {
   const { params } = props as { params: { id: string } };
-  const { isConnected } = useAccount();
+  const { isConnected, address } = useAccount();
   const [activeTab, setActiveTab] = useState("overview");
   const [amount, setAmount] = useState("");
   const [action, setAction] = useState("buy");
+  const [isInvesting, setIsInvesting] = useState(false);
 
-  // Mock data - replace with real data from contracts/API
+  // Get real fund data from Supabase
+  const { fund, loading } = useFund(params.id);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading fund details...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!fund) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold mb-4">Fund Not Found</h2>
+          <p className="text-gray-600 mb-4">The fund you&apos;re looking for doesn&apos;t exist.</p>
+          <Link href="/invest" className="text-blue-600 hover:text-blue-800">
+            ← Back to Browse Funds
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // Transform real data for display
   const fundData = {
-    id: params.id,
-    name: "DeFi Blue Chip Index",
-    description: "A diversified portfolio of leading DeFi tokens on Avalanche.",
-    creator: "Alex Turner",
-    tvl: 1234567,
-    currentPrice: 12.34,
-    totalSupply: 100000,
-    userBalance: 250.5,
-    holdings: [
-      { token: "Token A", allocation: 20, price: 100.0, value: 246913 },
-      { token: "Token B", allocation: 20, price: 50.0, value: 246913 },
-      { token: "Token C", allocation: 20, price: 75.0, value: 246913 },
-      { token: "Token D", allocation: 20, price: 125.0, value: 246913 },
-      { token: "Token E", allocation: 20, price: 25.0, value: 246913 },
-    ],
+    id: fund.id,
+    name: fund.name,
+    description: `A diversified index fund created by ${fund.creator_address.slice(0, 6)}...`,
+    creator: fund.creator_address.slice(0, 6) + "..." + fund.creator_address.slice(-4),
+    tvl: Math.random() * 5000000, // Mock TVL - would calculate from real data
+    currentPrice: 12.34, // Mock price
+    totalSupply: 100000, // Mock supply
+    userBalance: 250.5, // Mock user balance
+    holdings:
+      fund.fund_tokens?.map(token => ({
+        token: token.token_address,
+        allocation: token.weight_percentage,
+        price: Math.random() * 200, // Mock price
+        value: Math.random() * 500000, // Mock value
+      })) || [],
+    ticker: fund.ticker,
   };
 
   const estimatedFees = parseFloat(amount) * 0.01 || 0;
   const total = parseFloat(amount) + estimatedFees || 0;
+
+  const handleInvest = async () => {
+    if (!address || !amount || parseFloat(amount) <= 0) return;
+
+    setIsInvesting(true);
+    try {
+      const result = await investInFund(address, fund.id, parseFloat(amount));
+
+      if (result.success) {
+        alert(`Successfully ${action === "buy" ? "invested" : "sold"} ${amount} shares!`);
+        setAmount("");
+      } else {
+        alert(`Error: ${result.error}`);
+      }
+    } catch (error) {
+      console.error("Error investing:", error);
+      alert("An unexpected error occurred");
+    } finally {
+      setIsInvesting(false);
+    }
+  };
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
@@ -218,14 +270,15 @@ const FundDetail = (props: any) => {
 
                 {/* Action Button */}
                 <button
-                  disabled={!amount || parseFloat(amount) <= 0}
+                  onClick={handleInvest}
+                  disabled={!amount || parseFloat(amount) <= 0 || isInvesting}
                   className={`w-full py-3 px-4 rounded-lg font-semibold transition-colors ${
                     action === "buy"
                       ? "bg-blue-600 hover:bg-blue-700 text-white disabled:bg-gray-300"
                       : "bg-red-600 hover:bg-red-700 text-white disabled:bg-gray-300"
                   } disabled:cursor-not-allowed`}
                 >
-                  {action === "buy" ? "Buy" : "Sell"}
+                  {isInvesting ? "Processing..." : action === "buy" ? "Buy" : "Sell"}
                 </button>
               </>
             )}

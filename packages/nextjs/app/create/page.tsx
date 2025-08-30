@@ -4,11 +4,13 @@ import { useState } from "react";
 import type { NextPage } from "next";
 import { useAccount } from "wagmi";
 import { PlusIcon } from "@heroicons/react/24/outline";
+import { createFund } from "~~/hooks/useSupabase";
 
 const CreateFund: NextPage = () => {
-  const { isConnected } = useAccount();
+  const { isConnected, address } = useAccount();
   const [fundName, setFundName] = useState("");
   const [ticker, setTicker] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
   const [tokens, setTokens] = useState([
     { address: "", symbol: "", weight: 20 },
     { address: "", symbol: "", weight: 20 },
@@ -36,6 +38,52 @@ const CreateFund: NextPage = () => {
   const updateToken = (index: number, field: string, value: string | number) => {
     const updatedTokens = tokens.map((token, i) => (i === index ? { ...token, [field]: value } : token));
     setTokens(updatedTokens);
+  };
+
+  const updateWeight = (index: number, weight: number) => {
+    const updatedTokens = tokens.map((token, i) => (i === index ? { ...token, weight } : token));
+    setTokens(updatedTokens);
+  };
+
+  const redistributeWeights = () => {
+    const equalWeight = Math.floor(100 / tokens.length);
+    const updatedTokens = tokens.map(token => ({ ...token, weight: equalWeight }));
+    setTokens(updatedTokens);
+  };
+
+  const getTotalWeight = () => {
+    return tokens.reduce((sum, token) => sum + token.weight, 0);
+  };
+
+  const handleCreateFund = async () => {
+    if (!address || !fundName || !ticker || getTotalWeight() !== 100) return;
+
+    setIsCreating(true);
+    try {
+      const selectedTokens = tokens.filter(token => token.symbol);
+      const result = await createFund(address, fundName, ticker, selectedTokens);
+
+      if (result.success) {
+        alert(`Fund "${fundName}" created successfully!`);
+        // Reset form
+        setFundName("");
+        setTicker("");
+        setTokens([
+          { address: "", symbol: "", weight: 20 },
+          { address: "", symbol: "", weight: 20 },
+          { address: "", symbol: "", weight: 20 },
+          { address: "", symbol: "", weight: 20 },
+          { address: "", symbol: "", weight: 20 },
+        ]);
+      } else {
+        alert(`Error creating fund: ${result.error}`);
+      }
+    } catch (error) {
+      console.error("Error creating fund:", error);
+      alert("An unexpected error occurred");
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   if (!isConnected) {
@@ -91,45 +139,84 @@ const CreateFund: NextPage = () => {
         <div className="mb-8">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-semibold">Select Tokens & Define Weights</h2>
-            <button
-              onClick={addToken}
-              disabled={tokens.length >= 8}
-              className="flex items-center gap-2 px-4 py-2 border-2 border-dashed border-gray-300 text-gray-600 rounded-lg hover:border-blue-500 hover:text-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <PlusIcon className="h-4 w-4" />
-              Add Another Token
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={redistributeWeights}
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium"
+              >
+                Equal Weights
+              </button>
+              <button
+                onClick={addToken}
+                disabled={tokens.length >= 8}
+                className="flex items-center gap-2 px-4 py-2 border-2 border-dashed border-gray-300 text-gray-600 rounded-lg hover:border-blue-500 hover:text-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <PlusIcon className="h-4 w-4" />
+                Add Token
+              </button>
+            </div>
+          </div>
+
+          <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+            <div className="flex justify-between items-center">
+              <span className="text-sm font-medium text-gray-700">Total Weight:</span>
+              <span className={`font-bold ${getTotalWeight() === 100 ? "text-green-600" : "text-red-600"}`}>
+                {getTotalWeight()}%
+              </span>
+            </div>
+            {getTotalWeight() !== 100 && (
+              <p className="text-xs text-red-600 mt-1">Total weight must equal 100% to create the fund</p>
+            )}
           </div>
 
           <p className="text-sm text-gray-600 mb-6">
-            Choose up to 8 tokens for your index. All tokens will be equally weighted.
+            Choose up to 8 tokens for your index and set their allocation percentages.
           </p>
 
-          <div className="grid md:grid-cols-2 gap-4">
+          <div className="space-y-4">
             {tokens.map((token, index) => (
-              <div key={index} className="relative">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Token {index + 1}</label>
-                <select
-                  value={token.symbol}
-                  onChange={e => updateToken(index, "symbol", e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Select token</option>
-                  <option value="WAVAX">WAVAX</option>
-                  <option value="USDC">USDC</option>
-                  <option value="USDT">USDT</option>
-                  <option value="JOE">JOE</option>
-                  <option value="PNG">PNG</option>
-                </select>
+              <div key={index} className="relative bg-gray-50 p-4 rounded-lg">
+                <div className="grid md:grid-cols-3 gap-4 items-end">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Token {index + 1}</label>
+                    <select
+                      value={token.symbol}
+                      onChange={e => updateToken(index, "symbol", e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Select token</option>
+                      <option value="WAVAX">WAVAX</option>
+                      <option value="USDC">USDC</option>
+                      <option value="USDT">USDT</option>
+                      <option value="JOE">JOE</option>
+                      <option value="PNG">PNG</option>
+                    </select>
+                  </div>
 
-                {tokens.length > 2 && (
-                  <button
-                    onClick={() => removeToken(index)}
-                    className="absolute -top-2 -right-2 w-6 h-6 text-black rounded-full text-xs hover:bg-red-600 hover:text-white cursor-pointer"
-                  >
-                    ×
-                  </button>
-                )}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Weight (%)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={token.weight}
+                      onChange={e => updateWeight(index, parseInt(e.target.value) || 0)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="0"
+                    />
+                  </div>
+
+                  <div className="flex justify-end">
+                    {tokens.length > 2 && (
+                      <button
+                        onClick={() => removeToken(index)}
+                        className="px-3 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-medium"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
             ))}
           </div>
@@ -145,10 +232,11 @@ const CreateFund: NextPage = () => {
 
         {/* Create Button */}
         <button
-          disabled={!fundName || !ticker || tokens.some(t => !t.symbol)}
+          onClick={handleCreateFund}
+          disabled={!fundName || !ticker || tokens.some(t => !t.symbol) || getTotalWeight() !== 100 || isCreating}
           className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white py-3 px-6 rounded-lg font-semibold text-lg transition-colors"
         >
-          Create Fund
+          {isCreating ? "Creating Fund..." : "Create Fund"}
         </button>
       </div>
     </div>
