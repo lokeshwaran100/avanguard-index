@@ -84,6 +84,8 @@ contract Fund is ERC20, Ownable {
         require(fundTokenAmount > 0, "Amount must be greater than 0");
         require(balanceOf(msg.sender) >= fundTokenAmount, "Insufficient fund tokens");
         
+        // Simulate selling underlying tokens (in real implementation, this would use DEX)
+        
         // Calculate AVAX value of fund tokens
         uint256 avaxValue = calculateAvaxValue(fundTokenAmount);
         require(avaxValue > 0, "No value to return");
@@ -123,6 +125,27 @@ contract Fund is ERC20, Ownable {
     }
     
     /**
+     * @dev Get current fund value in USD
+     * @return Total fund value in USD (18 decimals)
+     */
+    function getCurrentFundValueUSD() internal view returns (uint256) {
+        if (totalSupply() == 0) return 0;
+        
+        uint256 totalValueUSD = 0;
+        for (uint256 i = 0; i < underlyingTokens.length; i++) {
+            uint256 tokenPriceUSD = IOracle(oracle).getPrice(underlyingTokens[i]);
+            // In real implementation, you'd get actual token balances
+            // For now, we assume equal distribution of AVAX value
+            // Convert AVAX balance to USD value
+            uint256 avaxBalance = address(this).balance / underlyingTokens.length;
+            uint256 avaxPriceUSD = IOracle(oracle).getPrice(address(0));
+            uint256 tokenValueUSD = (avaxBalance * avaxPriceUSD) / 1e8;
+            totalValueUSD += tokenValueUSD;
+        }
+        return totalValueUSD;
+    }
+    
+    /**
      * @dev Get fund token balance for a specific address
      * @param user Address to check balance for
      * @return Fund token balance
@@ -142,8 +165,19 @@ contract Fund is ERC20, Ownable {
             return avaxAmount;
         }
         
-        uint256 currentFundValue = this.getCurrentFundValue();
-        return (avaxAmount * totalSupply()) / currentFundValue;
+        // Get AVAX price in USD (8 decimals)
+        uint256 avaxPriceUSD = IOracle(oracle).getPrice(address(0));
+        
+        // Convert AVAX amount to USD value (18 decimals for AVAX, 8 decimals for price)
+        // avaxAmount * avaxPriceUSD / 10^8 = USD value with 18 decimals
+        uint256 avaxValueUSD = (avaxAmount * avaxPriceUSD) / 1e8;
+        
+        // Get current fund value in USD
+        uint256 currentFundValueUSD = getCurrentFundValueUSD();
+        
+        // Calculate fund tokens to mint based on USD proportion
+        // (avaxValueUSD * totalSupply) / currentFundValueUSD
+        return (avaxValueUSD * totalSupply()) / currentFundValueUSD;
     }
     
     /**
