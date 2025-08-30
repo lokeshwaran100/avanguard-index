@@ -482,7 +482,7 @@ const deployedContracts = {
       deployedOnBlock: 39,
     },
     FundFactory: {
-      address: "0x59b670e9fA9D0A427751Af201D676719a970857b",
+      address: "0x67d269191c92Caf3cD7723F116c85e6E9bf55933",
       abi: [
         {
           inputs: [
@@ -499,6 +499,11 @@ const deployedContracts = {
             {
               internalType: "address",
               name: "_treasury",
+              type: "address",
+            },
+            {
+              internalType: "address",
+              name: "_dex",
               type: "address",
             },
             {
@@ -662,6 +667,19 @@ const deployedContracts = {
               internalType: "uint256",
               name: "",
               type: "uint256",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "dex",
+          outputs: [
+            {
+              internalType: "address",
+              name: "",
+              type: "address",
             },
           ],
           stateMutability: "view",
@@ -871,6 +889,19 @@ const deployedContracts = {
           inputs: [
             {
               internalType: "address",
+              name: "newDex",
+              type: "address",
+            },
+          ],
+          name: "updateDex",
+          outputs: [],
+          stateMutability: "nonpayable",
+          type: "function",
+        },
+        {
+          inputs: [
+            {
+              internalType: "address",
               name: "newOracle",
               type: "address",
             },
@@ -899,10 +930,236 @@ const deployedContracts = {
         renounceOwnership: "@openzeppelin/contracts/access/Ownable.sol",
         transferOwnership: "@openzeppelin/contracts/access/Ownable.sol",
       },
-      deployedOnBlock: 43,
+      deployedOnBlock: 56,
+    },
+    MockDEX: {
+      address: "0xc5a5C42992dECbae36851359345FE25997F5C42d",
+      abi: [
+        {
+          inputs: [
+            {
+              internalType: "address",
+              name: "_oracle",
+              type: "address",
+            },
+          ],
+          stateMutability: "nonpayable",
+          type: "constructor",
+        },
+        {
+          inputs: [
+            {
+              internalType: "address",
+              name: "owner",
+              type: "address",
+            },
+          ],
+          name: "OwnableInvalidOwner",
+          type: "error",
+        },
+        {
+          inputs: [
+            {
+              internalType: "address",
+              name: "account",
+              type: "address",
+            },
+          ],
+          name: "OwnableUnauthorizedAccount",
+          type: "error",
+        },
+        {
+          anonymous: false,
+          inputs: [
+            {
+              indexed: true,
+              internalType: "address",
+              name: "previousOwner",
+              type: "address",
+            },
+            {
+              indexed: true,
+              internalType: "address",
+              name: "newOwner",
+              type: "address",
+            },
+          ],
+          name: "OwnershipTransferred",
+          type: "event",
+        },
+        {
+          inputs: [
+            {
+              internalType: "address",
+              name: "tokenIn",
+              type: "address",
+            },
+            {
+              internalType: "uint256",
+              name: "amountIn",
+              type: "uint256",
+            },
+          ],
+          name: "getAmountsOut",
+          outputs: [
+            {
+              internalType: "uint256",
+              name: "amountOut",
+              type: "uint256",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "oracle",
+          outputs: [
+            {
+              internalType: "address",
+              name: "",
+              type: "address",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "owner",
+          outputs: [
+            {
+              internalType: "address",
+              name: "",
+              type: "address",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "renounceOwnership",
+          outputs: [],
+          stateMutability: "nonpayable",
+          type: "function",
+        },
+        {
+          inputs: [
+            {
+              internalType: "address",
+              name: "tokenOut",
+              type: "address",
+            },
+            {
+              internalType: "uint256",
+              name: "amountOutMin",
+              type: "uint256",
+            },
+            {
+              internalType: "address",
+              name: "to",
+              type: "address",
+            },
+            {
+              internalType: "uint256",
+              name: "deadline",
+              type: "uint256",
+            },
+          ],
+          name: "swapExactAVAXForTokens",
+          outputs: [
+            {
+              internalType: "uint256",
+              name: "amountOut",
+              type: "uint256",
+            },
+          ],
+          stateMutability: "payable",
+          type: "function",
+        },
+        {
+          inputs: [
+            {
+              internalType: "address",
+              name: "tokenIn",
+              type: "address",
+            },
+            {
+              internalType: "uint256",
+              name: "amountIn",
+              type: "uint256",
+            },
+            {
+              internalType: "uint256",
+              name: "amountOutMin",
+              type: "uint256",
+            },
+            {
+              internalType: "address",
+              name: "to",
+              type: "address",
+            },
+            {
+              internalType: "uint256",
+              name: "deadline",
+              type: "uint256",
+            },
+          ],
+          name: "swapExactTokensForAVAX",
+          outputs: [
+            {
+              internalType: "uint256",
+              name: "amountOut",
+              type: "uint256",
+            },
+          ],
+          stateMutability: "nonpayable",
+          type: "function",
+        },
+        {
+          inputs: [
+            {
+              internalType: "address",
+              name: "newOwner",
+              type: "address",
+            },
+          ],
+          name: "transferOwnership",
+          outputs: [],
+          stateMutability: "nonpayable",
+          type: "function",
+        },
+        {
+          inputs: [
+            {
+              internalType: "address",
+              name: "newOracle",
+              type: "address",
+            },
+          ],
+          name: "updateOracle",
+          outputs: [],
+          stateMutability: "nonpayable",
+          type: "function",
+        },
+        {
+          stateMutability: "payable",
+          type: "receive",
+        },
+      ],
+      inheritedFunctions: {
+        getAmountsOut: "contracts/IDEX.sol",
+        swapExactAVAXForTokens: "contracts/IDEX.sol",
+        swapExactTokensForAVAX: "contracts/IDEX.sol",
+        owner: "@openzeppelin/contracts/access/Ownable.sol",
+        renounceOwnership: "@openzeppelin/contracts/access/Ownable.sol",
+        transferOwnership: "@openzeppelin/contracts/access/Ownable.sol",
+      },
+      deployedOnBlock: 54,
     },
     MockERC20: {
-      address: "0xa85233C63b9Ee964Add6F2cffe00Fd84eb32338f",
+      address: "0x84eA74d481Ee0A5332c457a4d796187F6Ba67fEB",
       abi: [
         {
           inputs: [
@@ -1353,7 +1610,7 @@ const deployedContracts = {
         renounceOwnership: "@openzeppelin/contracts/access/Ownable.sol",
         transferOwnership: "@openzeppelin/contracts/access/Ownable.sol",
       },
-      deployedOnBlock: 49,
+      deployedOnBlock: 62,
     },
     MockOracle: {
       address: "0xc6e7DF5E7b4f2A278906862b61205850344D4e7d",
