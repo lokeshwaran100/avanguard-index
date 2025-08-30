@@ -1,6 +1,6 @@
-# Avanguard Index MVP Smart Contract Functionalities
+# Avaguard Index MVP Smart Contract Functionalities
 
-The Avanguard Index MVP smart contracts will provide the core decentralized mutual fund functionality on Avalanche testnet by enabling token creation, fund creation with token-weighted indexes, and basic buy/sell functionality with associated fees and tokenomics.
+The Avaguard Index MVP smart contracts will provide the core decentralized mutual fund functionality on Avalanche testnet by enabling token creation, fund creation with token-weighted indexes, and basic buy/sell functionality with associated fees and tokenomics.
 
 ---
 
@@ -55,7 +55,7 @@ Emits events on key actions such as fund creation, share buy/sell transactions, 
 
 ---
 
-# Avanguard Index MVP Smart Contract Functions
+# Avaguard Index MVP Smart Contract Functions
 
 ## Project Token (AGI) Contract
 - `constructor()`: Initialize fixed total supply (1 billion) and assign to deployer.
@@ -95,6 +95,7 @@ Emits events on key actions such as fund creation, share buy/sell transactions, 
 - `Sell(address indexed investor, uint256 sharesBurned, uint256 redeemedAmount)`.
 - `Rebalance(address indexed creator, address[] newTokens, uint256[] newWeights)`.
 - `FeeDistributed(uint256 totalFee, uint256 toCreator, uint256 buybackBurn, uint256 toTreasury)`.
+
 
 ---
 
