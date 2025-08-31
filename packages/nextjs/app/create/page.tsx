@@ -12,6 +12,8 @@ const CreateFund: NextPage = () => {
   const [fundName, setFundName] = useState("");
   const [ticker, setTicker] = useState("");
   const [isCreating, setIsCreating] = useState(false);
+  const [showFaucet, setShowFaucet] = useState(false);
+  const [isClaiming, setIsClaiming] = useState(false);
 
   // Contract hooks
   const { createNewFund, isCreatingFund } = useFundFactory();
@@ -144,6 +146,28 @@ const CreateFund: NextPage = () => {
       alert("An unexpected error occurred");
     } finally {
       setIsCreating(false);
+    }
+  };
+
+  const claimAgi = async () => {
+    if (!address) return;
+    try {
+      setIsClaiming(true);
+      const res = await fetch("/api/faucet", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: address, amount: "1500" }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert("Claim submitted! TX: " + data.txHash);
+      } else {
+        alert("Faucet error: " + data.error);
+      }
+    } catch {
+      alert("Faucet request failed");
+    } finally {
+      setIsClaiming(false);
     }
   };
 
@@ -285,7 +309,7 @@ const CreateFund: NextPage = () => {
           </div>
         </div>
 
-        {/* AGI Balance & Creation Fee */}
+        {/* AGI Balance, Faucet & Approval */}
         <div className="mb-8 space-y-4">
           <div className="p-4 bg-gray-50 rounded-lg">
             <div className="flex justify-between items-center">
@@ -302,6 +326,24 @@ const CreateFund: NextPage = () => {
             {agiBalance < 1000 && (
               <p className="text-red-600 text-sm mt-2">Insufficient AGI balance. You need 1000 AGI to create a fund.</p>
             )}
+            <div className="mt-3 flex gap-2">
+              <button
+                onClick={() => setShowFaucet(true)}
+                className="px-3 py-2 bg-[#3B82F6] hover:bg-[#3B82F6]/80 text-white rounded-lg text-sm font-medium"
+              >
+                Claim 1500 AGI (Faucet)
+              </button>
+              <button
+                onClick={async () => {
+                  const res = await approveAGIForFundCreation();
+                  if (res.success) alert("AGI approved!");
+                  else alert("Approve failed: " + res.error);
+                }}
+                className="px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium"
+              >
+                Approve AGI
+              </button>
+            </div>
           </div>
         </div>
 
@@ -322,6 +364,32 @@ const CreateFund: NextPage = () => {
           {isCreating || isCreatingFund ? "Creating Fund..." : isApprovingAGI ? "Approving AGI..." : "Create Fund"}
         </button>
       </div>
+
+      {/* Faucet Modal */}
+      {showFaucet && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-lg w-full max-w-md p-6">
+            <h3 className="text-lg font-semibold mb-2">AGI Faucet</h3>
+            <p className="text-sm text-gray-600 mb-4">Claim 1500 AGI test tokens to create a fund.</p>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setShowFaucet(false)}
+                className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                disabled={isClaiming}
+              >
+                Close
+              </button>
+              <button
+                onClick={claimAgi}
+                disabled={isClaiming}
+                className="px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium disabled:bg-gray-300"
+              >
+                {isClaiming ? "Claiming..." : "Claim 1500 AGI"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -54,7 +54,7 @@ const config: HardhatUserConfig = {
       },
     },
     localhost: {
-      url: process.env.RPC_URL || "http://127.0.0.1:8545",
+      url: process.env.NEXT_PUBLIC_RPC_URL || "http://127.0.0.1:8545",
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
     },
     fuji: {

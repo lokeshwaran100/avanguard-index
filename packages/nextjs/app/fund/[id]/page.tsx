@@ -17,6 +17,7 @@ const FundDetail = (props: any) => {
 
   // Get real fund data from Supabase using fund address
   const { fund, loading } = useFund(params.id); // params.id is now the fund address
+  const isLoadingBalance = !fund || loading; // simple loading flag for balance section
 
   // Get real contract data using the fund address
   const { fundTokenBalance, currentFundValue, totalSupply, buyFundTokens, sellFundTokens, isBuyingTokens, refresh } =
@@ -278,9 +279,13 @@ const FundDetail = (props: any) => {
                 {/* Balance */}
                 <div className="mb-4">
                   <p className="text-sm text-gray-600">Your Balance</p>
-                  <p className="font-semibold">
-                    {fundData.userBalance.toFixed(4)} {fund.ticker}
-                  </p>
+                  {isLoadingBalance ? (
+                    <p className="text-sm text-gray-500">Fetching balance...</p>
+                  ) : (
+                    <p className="font-semibold">
+                      {fundData.userBalance.toFixed(4)} {fund.ticker}
+                    </p>
+                  )}
                 </div>
 
                 {/* Fee Breakdown */}
