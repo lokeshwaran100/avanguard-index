@@ -94,6 +94,10 @@ export const useFundFactory = () => {
 export const useAGIToken = () => {
   const { address } = useAccount();
 
+  // Also get FundFactory to use its live address for allowance/approve
+  const { data: fundFactory } = useScaffoldContract({ contractName: "FundFactory" });
+  const fundFactoryAddress = fundFactory?.address || "0x0000000000000000000000000000000000000000";
+
   // Read AGI balance
   const { data: agiBalance } = useScaffoldReadContract({
     contractName: "AGIToken",
@@ -105,10 +109,7 @@ export const useAGIToken = () => {
   const { data: agiAllowance } = useScaffoldReadContract({
     contractName: "AGIToken",
     functionName: "allowance",
-    args: [
-      address || "0x0000000000000000000000000000000000000000",
-      "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
-    ] as const, // FundFactory address
+    args: [address || "0x0000000000000000000000000000000000000000", fundFactoryAddress] as const,
   });
 
   // Write function to approve AGI spending
@@ -119,9 +120,10 @@ export const useAGIToken = () => {
     if (!address) throw new Error("Wallet not connected");
 
     try {
+      if (!fundFactory || !fundFactory.address) throw new Error("FundFactory address not found");
       const result = await approveAGI({
         functionName: "approve",
-        args: ["0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9", BigInt("1000000000000000000000")] as const, // 1000 AGI
+        args: [fundFactory.address, BigInt("1000000000000000000000")] as const, // 1000 AGI
       });
       return { success: true, txHash: result };
     } catch (error) {
@@ -255,12 +257,16 @@ export const useFundContract = (fundAddress?: string) => {
   };
 };
 
-// Helper function to get mock token addresses
-export const getMockTokenAddresses = () => {
+// Helper function to get real Avalanche Fuji testnet token addresses
+export const getAvalancheFujiTokenAddresses = () => {
   return {
-    USDC: "0x9A676e781A523b5d0C0e43731313A708CB607508",
-    USDT: "0x0B306BF915C4d645ff596e518fAf3F9669b97016",
-    WBTC: "0x959922bE3CAee4b8Cd9a407cc3ac1C251C2007B1",
-    // Add more as needed
+    ELK: "0x20E65F58Fca6D9442189d66B779A0A4FC5eDc3DD",
+    COW: "0xf0D530cD6612b95c388c07C1BED5fe0B835cBF4c",
+    TUR: "0xED29d041160060de2d540decD271D085Fec3e450",
+    PNG: "0xa79FD4Aa2bdD5Df395Ad82FA61dB2B2201244188",
+    WAVAX: "0xd00ae08403B9bbb9124bB305C09058E32C39A48c",
+    JOE: "0xEa81F6972aDf76765Fd1435E119Acc0Aafc80BeA",
+    UNI: "0xf4E0A9224e8827dE91050b528F34e2F99C82Fbf6",
+    SUSHI: "0x72C14f7fB8B14040dA6E5b1B9D1B9438ebD85F58",
   };
 };

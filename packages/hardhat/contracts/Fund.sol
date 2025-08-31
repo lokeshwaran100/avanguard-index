@@ -7,6 +7,26 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "./IOracle.sol";
 import "./IDEX.sol";
 
+interface IWAVAX {
+    function deposit() external payable;
+    function withdraw(uint256) external;
+}
+
+interface IPangolinRouter {
+    function swapExactTokensForTokensSupportingFeeOnTransferTokens(
+        uint amountIn,
+        uint amountOutMin,
+        address[] calldata path,
+        address to,
+        uint deadline
+    ) external;
+    
+    function getAmountsIn(uint amountOut, address[] calldata path)
+        external
+        view
+        returns (uint[] memory amounts);
+}
+
 /**
  * Fund Contract - Manages individual index funds
  * @author Avanguard Index
@@ -19,6 +39,8 @@ contract Fund is ERC20, Ownable {
     address public creator;
     address public oracle;
     address public dex;
+    address public wavax;
+
     
     // Token balance tracking
     mapping(address => uint256) public tokenBalances;
@@ -26,6 +48,7 @@ contract Fund is ERC20, Ownable {
     // Fee structure (1% = 100 basis points)
     uint256 public constant FEE_BASIS_POINTS = 100; // 1%
     uint256 public constant BASIS_POINTS_DENOMINATOR = 10000;
+    uint256 public constant SLIPPAGE_BUFFER_BASIS_POINTS = 200; // 2%
     
     // Fee distribution percentages
     uint256 public constant CREATOR_FEE_PERCENT = 50; // 50% to creator
@@ -47,7 +70,8 @@ contract Fund is ERC20, Ownable {
         address _creator,
         address _oracle,
         address _treasury,
-        address _dex
+        address _dex,
+        address _wavax
     ) ERC20(_fundName, _fundTicker) Ownable(_creator) {
         fundName = _fundName;
         fundTicker = _fundTicker;
@@ -56,8 +80,39 @@ contract Fund is ERC20, Ownable {
         oracle = _oracle;
         treasury = _treasury;
         dex = _dex;
+        wavax = _wavax;
         _transferOwnership(_creator);
     }
+
+    function swapExactTokensForTokens(
+        address fromToken,
+        address toToken,
+        uint256 amountIn
+    ) internal returns (uint256 tokensOut) {
+        require(dex != address(0), "DEX not set");
+        require(amountIn > 0, "Amount must be > 0");
+
+        IERC20(fromToken).approve(dex, amountIn);
+
+        address[] memory path = new address[](2);
+        path[0] = fromToken;
+        path[1] = toToken;
+
+        uint256 balanceBefore = IERC20(toToken).balanceOf(address(this));
+
+        IPangolinRouter(dex).swapExactTokensForTokensSupportingFeeOnTransferTokens(
+            amountIn,
+            1, // amountOutMin (you can adjust for slippage)
+            path,
+            address(this),
+            block.timestamp + 1200 // 20 minutes
+        );
+
+        uint256 balanceAfter = IERC20(toToken).balanceOf(address(this));
+        tokensOut = balanceAfter - balanceBefore;
+    }
+
+
     
     /**
      * @dev Buy fund tokens with AVAX
@@ -79,64 +134,95 @@ contract Fund is ERC20, Ownable {
         distributeFees(fee);
         
         // Buy underlying tokens with remaining AVAX
-        buyUnderlyingTokens(remainingAmount);
+        IWAVAX(wavax).deposit{value: remainingAmount}();
+        buyUnderlyingTokens(IERC20(wavax).balanceOf(address(this)));
         
         emit FundTokenBought(msg.sender, msg.value, fundTokensToMint, fee);
     }
-    
-    /**
-     * @dev Buy underlying tokens with AVAX
-     * @param avaxAmount Amount of AVAX to spend on tokens
-     */
-    function buyUnderlyingTokens(uint256 avaxAmount) internal {
-        require(avaxAmount > 0, "Amount must be greater than 0");
-        require(dex != address(0), "DEX not set");
+
+
+
+function buyUnderlyingTokens(uint256 wavaxAmount) internal {
+    require(wavaxAmount > 0, "Amount must be greater than 0");
+    require(dex != address(0), "DEX not set");
+
+    uint256 amountPerToken = wavaxAmount / underlyingTokens.length;
+
+    for (uint256 i = 0; i < underlyingTokens.length; i++) {
+        address token = underlyingTokens[i];
         
-        uint256 amountPerToken = avaxAmount / underlyingTokens.length;
-        
-        for (uint256 i = 0; i < underlyingTokens.length; i++) {
-            if (amountPerToken > 0) {
-                // Swap AVAX for the underlying token using DEX
-                uint256 tokensReceived = swapAvaxForTokens(underlyingTokens[i], amountPerToken);
-                tokenBalances[underlyingTokens[i]] += tokensReceived;
-            }
-        }
-    }
-    
-    /**
-     * @dev Sell underlying tokens proportionally based on sell percentage
-     * @param sellPercentage The percentage of fund tokens being sold (18 decimals)
-     * @return totalAvaxReceived Total AVAX received from all token swaps
-     */
-    function sellUnderlyingTokens(uint256 sellPercentage) internal returns (uint256 totalAvaxReceived) {
-        require(dex != address(0), "DEX not set");
-        require(sellPercentage > 0, "Sell percentage must be greater than 0");
-        
-        totalAvaxReceived = 0;
-        
-        // Sell each underlying token proportionally
-        for (uint256 i = 0; i < underlyingTokens.length; i++) {
-            address token = underlyingTokens[i];
-            uint256 tokenBalance = tokenBalances[token];
+        if (amountPerToken > 0) {
+            address[] memory path = new address[](2);
+            path[0] = wavax;
+            path[1] = token;
+
+            IERC20(wavax).approve(dex, amountPerToken);
+            uint256 balanceBefore = IERC20(token).balanceOf(address(this));
             
-            if (tokenBalance > 0) {
-                // Calculate how much of this token to sell based on the sell percentage
-                uint256 tokensToSell = (tokenBalance * sellPercentage) / 1e18;
-                
-                if (tokensToSell > 0) {
-                    // Swap tokens for AVAX using DEX
-                    uint256 avaxReceived = swapTokensForAvax(token, tokensToSell);
-                    totalAvaxReceived += avaxReceived;
-                    
-                    // Update token balance
-                    tokenBalances[token] -= tokensToSell;
-                }
+            try IPangolinRouter(dex).swapExactTokensForTokensSupportingFeeOnTransferTokens(
+                amountPerToken,
+                1, // amountOutMin
+                path,
+                address(this),
+                block.timestamp + 1200
+            ) {
+                uint256 balanceAfter = IERC20(token).balanceOf(address(this));
+                uint256 tokensReceived = balanceAfter - balanceBefore;
+                tokenBalances[token] += tokensReceived;
+            } catch {
+                // If swap fails, just continue to the next token
+                continue;
             }
         }
-        
-        return totalAvaxReceived;
     }
+}
+
+
     
+function sellUnderlyingTokens(uint256 sellPercentage) internal returns (uint256 totalAvaxReceived) {
+    require(dex != address(0), "DEX not set");
+    require(sellPercentage > 0, "Sell percentage must be greater than 0");
+
+    totalAvaxReceived = 0;
+
+    for (uint256 i = 0; i < underlyingTokens.length; i++) {
+        address token = underlyingTokens[i];
+        uint256 tokenBalance = tokenBalances[token];
+
+        if (tokenBalance > 0) {
+            uint256 tokensToSell = (tokenBalance * sellPercentage) / 1e18;
+            if (tokensToSell == 0) continue;
+
+            address[] memory path = new address[](2);
+            path[0] = token;
+            path[1] = wavax;
+
+            IERC20(token).approve(dex, tokensToSell);
+
+            uint256 wavaxBefore = IERC20(wavax).balanceOf(address(this));
+
+            IPangolinRouter(dex).swapExactTokensForTokensSupportingFeeOnTransferTokens(
+                tokensToSell,
+                1, // amountOutMin
+                path,
+                address(this),
+                block.timestamp + 1200
+            );
+
+            uint256 wavaxAfter = IERC20(wavax).balanceOf(address(this));
+            uint256 wavaxReceived = wavaxAfter - wavaxBefore;
+
+            if (wavaxReceived > 0) {
+                IWAVAX(wavax).withdraw(wavaxReceived); // unwrap WAVAX → AVAX
+                totalAvaxReceived += wavaxReceived;
+                tokenBalances[token] -= tokensToSell;
+            }
+        }
+    }
+
+    return totalAvaxReceived;
+}
+
     /**
      * @dev Sell fund tokens for AVAX
      * @param fundTokenAmount Amount of fund tokens to sell
@@ -169,33 +255,36 @@ contract Fund is ERC20, Ownable {
         
         emit FundTokenSold(msg.sender, fundTokenAmount, avaxToReturn, fee);
     }
-    
-    /**
-     * @dev Swap tokens for AVAX using DEX
-     * @param token The token address to swap
-     * @param amount The amount of tokens to swap
-     * @return avaxReceived The amount of AVAX received
-     */
-    function swapTokensForAvax(address token, uint256 amount) internal returns (uint256 avaxReceived) {
-        require(dex != address(0), "DEX not set");
-        require(amount > 0, "Amount must be greater than 0");
-        
-        // Get the expected AVAX output from DEX
-        uint256 expectedAvax = IDEX(dex).getAmountsOut(token, amount);
-        require(expectedAvax > 0, "No AVAX value for tokens");
-        
-        // In a real implementation, this would:
-        // 1. Approve the DEX to spend the tokens: IERC20(token).approve(dex, amount)
-        // 2. Call the DEX swap function: IDEX(dex).swapExactTokensForAVAX(token, amount, expectedAvax, address(this), block.timestamp)
-        // 3. Handle the actual token transfer and AVAX receipt
-        
-        // For now, we'll simulate the swap by returning the expected value
-        // The actual DEX integration would be implemented here
-        avaxReceived = expectedAvax;
-        
-        return avaxReceived;
-    }
-    
+
+
+
+function swapTokensForAvax(address token, uint256 amount) internal returns (uint256 avaxReceived) {
+    require(dex != address(0), "DEX not set");
+
+    IERC20(token).approve(dex, amount);
+
+    address[] memory path = new address[](2);
+    path[0] = token;
+    path[1] = wavax;
+
+    uint256 balanceBefore = address(this).balance;
+
+    IPangolinRouter(dex).swapExactTokensForTokensSupportingFeeOnTransferTokens(
+        amount,
+        1,
+        path,
+        address(this),
+        block.timestamp + 1200
+    );
+
+    // unwrap WAVAX to AVAX
+    uint256 wavaxBalance = IERC20(wavax).balanceOf(address(this));
+    IWAVAX(wavax).withdraw(wavaxBalance);
+
+    uint256 balanceAfter = address(this).balance;
+    avaxReceived = balanceAfter - balanceBefore;
+}
+
     /**
      * @dev Swap AVAX for tokens using DEX
      * @param token The token address to receive
@@ -289,16 +378,20 @@ contract Fund is ERC20, Ownable {
      */
     function calculateFundTokensToMint(uint256 avaxAmount) internal view returns (uint256) {
         if (totalSupply() == 0) {
-            // First investment - mint tokens based on AVAX amount
+            // First investment - mint tokens 1:1 with avax amount
             return avaxAmount;
         }
         
+        // Apply a buffer to the investment amount to account for potential slippage on asset purchase
+        uint256 effectiveAvaxAmount = (avaxAmount * (BASIS_POINTS_DENOMINATOR - SLIPPAGE_BUFFER_BASIS_POINTS))
+            / BASIS_POINTS_DENOMINATOR;
+
         // Get AVAX price in USD (8 decimals)
         uint256 avaxPriceUSD = IOracle(oracle).getPrice(address(0));
         
         // Convert AVAX amount to USD value (18 decimals for AVAX, 8 decimals for price)
         // avaxAmount * avaxPriceUSD / 10^8 = USD value with 18 decimals
-        uint256 avaxValueUSD = (avaxAmount * avaxPriceUSD) / 1e8;
+        uint256 avaxValueUSD = (effectiveAvaxAmount * avaxPriceUSD) / 1e8;
         
         // Get current fund value in USD
         uint256 currentFundValueUSD = getCurrentFundValueUSD();

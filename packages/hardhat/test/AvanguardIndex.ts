@@ -1,24 +1,25 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
-import { AGIToken, MockOracle, FundFactory, Fund, MockERC20, MockDEX } from "../typechain-types";
+import { AGIToken, MockOracle, FundFactory, Fund } from "../typechain-types";
+import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 
 describe("Avanguard Index", function () {
   let agiToken: AGIToken;
   let mockOracle: MockOracle;
-  let mockDex: MockDEX;
   let fundFactory: FundFactory;
-  let mockUSDC: MockERC20;
-  let mockUSDT: MockERC20;
-  let mockWBTC: MockERC20;
-  let owner: any;
-  let user1: any;
-  let user2: any;
+  let owner: SignerWithAddress;
+  let user1: SignerWithAddress;
+  let user2: SignerWithAddress;
 
-  before(async () => {
-    [owner, user1, user2] = await ethers.getSigners();
-  });
+  const fujiWavaxAddress = "0xd00ae08403B9bbb9124bB305C09058E32C39A48c";
+  const fujiDexAddress = "0x2D99ABD9008Dc933ff5c0CD271B88309593aB921";
 
   beforeEach(async () => {
+    const signers = await ethers.getSigners();
+    owner = signers[0];
+    user1 = signers[1];
+    user2 = signers[2];
+
     // Deploy AGI Token
     const AGITokenFactory = await ethers.getContractFactory("AGIToken");
     agiToken = (await AGITokenFactory.deploy(owner.address)) as AGIToken;
@@ -29,37 +30,17 @@ describe("Avanguard Index", function () {
     mockOracle = (await MockOracleFactory.deploy()) as MockOracle;
     await mockOracle.waitForDeployment();
 
-    // Deploy Mock DEX
-    const MockDEXFactory = await ethers.getContractFactory("MockDEX");
-    mockDex = (await MockDEXFactory.deploy(await mockOracle.getAddress())) as MockDEX;
-    await mockDex.waitForDeployment();
-
     // Deploy Fund Factory
     const FundFactoryFactory = await ethers.getContractFactory("FundFactory");
     fundFactory = (await FundFactoryFactory.deploy(
       await agiToken.getAddress(),
       await mockOracle.getAddress(),
       owner.address,
-      await mockDex.getAddress(),
-      owner.address
+      fujiDexAddress,
+      fujiWavaxAddress,
+      owner.address,
     )) as FundFactory;
     await fundFactory.waitForDeployment();
-
-    // Deploy Mock Tokens
-    const MockERC20Factory = await ethers.getContractFactory("MockERC20");
-    mockUSDC = (await MockERC20Factory.deploy("USD Coin", "USDC", owner.address)) as MockERC20;
-    await mockUSDC.waitForDeployment();
-
-    mockUSDT = (await MockERC20Factory.deploy("Tether USD", "USDT", owner.address)) as MockERC20;
-    await mockUSDT.waitForDeployment();
-
-    mockWBTC = (await MockERC20Factory.deploy("Wrapped Bitcoin", "WBTC", owner.address)) as MockERC20;
-    await mockWBTC.waitForDeployment();
-
-    // Set mock prices
-    await mockOracle.setTokenPrice(await mockUSDC.getAddress(), 100000000); // $1.00
-    await mockOracle.setTokenPrice(await mockUSDT.getAddress(), 100000000); // $1.00
-    await mockOracle.setTokenPrice(await mockWBTC.getAddress(), 30000000000); // $30,000.00
 
     // Transfer some AGI tokens to users for testing
     await agiToken.transfer(user1.address, ethers.parseEther("10000"));
@@ -75,9 +56,9 @@ describe("Avanguard Index", function () {
     it("Should allow burning tokens", async function () {
       const initialBalance = await agiToken.balanceOf(user1.address);
       const burnAmount = ethers.parseEther("100");
-      
+
       await agiToken.connect(user1).burn(burnAmount);
-      
+
       const finalBalance = await agiToken.balanceOf(user1.address);
       expect(finalBalance).to.equal(initialBalance - burnAmount);
     });
@@ -87,7 +68,10 @@ describe("Avanguard Index", function () {
     it("Should create a new fund", async function () {
       const fundName = "Test Fund";
       const fundTicker = "TEST";
-      const tokens = [await mockUSDC.getAddress(), await mockUSDT.getAddress()];
+      const tokens = [
+        "0xEa81F6972aDf76765Fd1435E119Acc0Aafc80BeA", // JOE
+        "0xf4E0A9224e8827dE91050b528F34e2F99C82Fbf6", // UNI
+      ];
 
       // Approve AGI tokens for fund creation
       await agiToken.connect(user1).approve(await fundFactory.getAddress(), ethers.parseEther("1000"));
@@ -99,7 +83,7 @@ describe("Avanguard Index", function () {
       const fundCount = await fundFactory.getTotalFunds();
       expect(fundCount).to.equal(1);
 
-      const [fundAddress, name, ticker, underlyingTokens] = await fundFactory.getFund(0);
+      const [, name, ticker, underlyingTokens] = await fundFactory.getFund(0);
       expect(name).to.equal(fundName);
       expect(ticker).to.equal(fundTicker);
       expect(underlyingTokens).to.deep.equal(tokens);
@@ -108,12 +92,10 @@ describe("Avanguard Index", function () {
     it("Should require AGI tokens for fund creation", async function () {
       const fundName = "Test Fund";
       const fundTicker = "TEST";
-      const tokens = [await mockUSDC.getAddress()];
+      const tokens = ["0xEa81F6972aDf76765Fd1435E119Acc0Aafc80BeA"];
 
       // Try to create fund without approving AGI tokens
-      await expect(
-        fundFactory.connect(user2).createFund(fundName, fundTicker, tokens)
-      ).to.be.reverted;
+      await expect(fundFactory.connect(user2).createFund(fundName, fundTicker, tokens)).to.be.reverted;
     });
   });
 
@@ -121,16 +103,23 @@ describe("Avanguard Index", function () {
     let testFund: Fund;
 
     beforeEach(async () => {
+      // Set prices for the tokens used in this test suite
+      await mockOracle.setTokenPrice("0xEa81F6972aDf76765Fd1435E119Acc0Aafc80BeA", 4 * 1e8); // JOE at $4
+      await mockOracle.setTokenPrice("0xf4E0A9224e8827dE91050b528F34e2F99C82Fbf6", 5 * 1e8); // UNI at $5
+
       // Create a test fund
       const fundName = "Test Fund";
       const fundTicker = "TEST";
-      const tokens = [await mockUSDC.getAddress(), await mockUSDT.getAddress()];
+      const tokens = [
+        "0xEa81F6972aDf76765Fd1435E119Acc0Aafc80BeA", // JOE
+        "0xf4E0A9224e8827dE91050b528F34e2F99C82Fbf6", // UNI
+      ];
 
       await agiToken.connect(user1).approve(await fundFactory.getAddress(), ethers.parseEther("1000"));
       await fundFactory.connect(user1).createFund(fundName, fundTicker, tokens);
 
       const [fundAddress] = await fundFactory.getFund(0);
-      testFund = await ethers.getContractAt("Fund", fundAddress) as Fund;
+      testFund = (await ethers.getContractAt("Fund", fundAddress)) as Fund;
     });
 
     it("Should allow buying fund tokens", async function () {
@@ -148,7 +137,7 @@ describe("Avanguard Index", function () {
       await testFund.connect(user2).buy({ value: buyAmount });
 
       const fundTokenBalance = await testFund.balanceOf(user2.address);
-      
+
       // Sell half of the fund tokens
       const sellAmount = fundTokenBalance / 2n;
       await testFund.connect(user2).sell(sellAmount);
@@ -170,9 +159,9 @@ describe("Avanguard Index", function () {
       await testFund.connect(user2).buy({ value: buyAmount });
 
       // Check token balances for each underlying token
-      const usdcBalance = await testFund.getTokenBalance(await mockUSDC.getAddress());
-      const usdtBalance = await testFund.getTokenBalance(await mockUSDT.getAddress());
-      
+      const usdcBalance = await testFund.getTokenBalance("0xEa81F6972aDf76765Fd1435E119Acc0Aafc80BeA");
+      const usdtBalance = await testFund.getTokenBalance("0xf4E0A9224e8827dE91050b528F34e2F99C82Fbf6");
+
       expect(usdcBalance).to.be.gt(0);
       expect(usdtBalance).to.be.gt(0);
     });
@@ -180,33 +169,75 @@ describe("Avanguard Index", function () {
 
   describe("Oracle", function () {
     it("Should return correct token prices", async function () {
-      const usdcPrice = await mockOracle.getPrice(await mockUSDC.getAddress());
-      expect(usdcPrice).to.equal(100000000); // $1.00
-
-      const wbtcPrice = await mockOracle.getPrice(await mockWBTC.getAddress());
-      expect(wbtcPrice).to.equal(30000000000); // $30,000.00
+      const MockERC20Factory = await ethers.getContractFactory("MockERC20");
+      const mockToken = await MockERC20Factory.deploy("Test", "TST", owner.address);
+      await mockToken.waitForDeployment();
+      await mockOracle.setTokenPrice(await mockToken.getAddress(), 12345);
+      const price = await mockOracle.getPrice(await mockToken.getAddress());
+      expect(price).to.equal(12345);
     });
 
     it("Should allow updating token prices", async function () {
-      const newPrice = 200000000; // $2.00
-      await mockOracle.setTokenPrice(await mockUSDC.getAddress(), newPrice);
-
-      const updatedPrice = await mockOracle.getPrice(await mockUSDC.getAddress());
+      const MockERC20Factory = await ethers.getContractFactory("MockERC20");
+      const mockToken = await MockERC20Factory.deploy("Test", "TST", owner.address);
+      await mockToken.waitForDeployment();
+      await mockOracle.setTokenPrice(await mockToken.getAddress(), 12345);
+      const newPrice = 54321;
+      await mockOracle.setTokenPrice(await mockToken.getAddress(), newPrice);
+      const updatedPrice = await mockOracle.getPrice(await mockToken.getAddress());
       expect(updatedPrice).to.equal(newPrice);
     });
   });
 
-  describe("Mock DEX", function () {
-    it("Should calculate expected output amounts", async function () {
-      const amountIn = ethers.parseEther("1");
-      const expectedOutput = await mockDex.getAmountsOut(await mockUSDC.getAddress(), amountIn);
-      expect(expectedOutput).to.be.gt(0);
-    });
+  describe("Full Flow Test", function () {
+    let testFund: Fund;
 
-    it("Should handle AVAX to token swaps", async function () {
-      const avaxAmount = ethers.parseEther("1");
-      const expectedTokens = await mockDex.getAmountsOut(ethers.ZeroAddress, avaxAmount);
-      expect(expectedTokens).to.equal(avaxAmount); // 1:1 ratio in mock
+    it("Should execute the complete fund lifecycle - deployment, creation, buy, sell", async function () {
+      // ======== CONFIGURE ORACLE ========
+      // Set mock prices for all tokens (in USD with 8 decimals)
+      await mockOracle.setTokenPrice(ethers.ZeroAddress, 30 * 1e8); // AVAX (for Fund.sol internal calculations)
+      await mockOracle.setTokenPrice(fujiWavaxAddress, 30 * 1e8); // WAVAX
+      await mockOracle.setTokenPrice("0x20E65F58Fca6D9442189d66B779A0A4FC5eDc3DD", 1 * 1e8); // ELK
+      await mockOracle.setTokenPrice("0xf0D530cD6612b95c388c07C1BED5fe0B835cBF4c", 2 * 1e8); // COW
+      await mockOracle.setTokenPrice("0xED29d041160060de2d540decD271D085Fec3e450", 3 * 1e8); // TUR
+      await mockOracle.setTokenPrice("0xEa81F6972aDf76765Fd1435E119Acc0Aafc80BeA", 4 * 1e8); // JOE
+      await mockOracle.setTokenPrice("0xf4E0A9224e8827dE91050b528F34e2F99C82Fbf6", 5 * 1e8); // UNI
+      await mockOracle.setTokenPrice("0x72C14f7fB8B14040dA6E5b1B9D1B9438ebD85F58", 6 * 1e8); // SUSHI
+      await mockOracle.setTokenPrice("0x20C62EEde571409f7101076F8dA0221867AA46dc", 7 * 1e8); // PNG
+
+      // ======== FUND CREATION ========
+      // Get creation fee and transfer AGI to user1
+      const requiredAgi = await fundFactory.FUND_CREATION_FEE();
+      await agiToken.transfer(user1.address, requiredAgi);
+
+      // Approve factory to spend AGI
+      await agiToken.connect(user1).approve(await fundFactory.getAddress(), requiredAgi);
+
+      // Define underlying tokens for the fund
+      const tokens = ["0x20C62EEde571409f7101076F8dA0221867AA46dc"]; // PNG
+
+      // Create the fund
+      await fundFactory.connect(user1).createFund("Test Fund All Tokens", "TSTAT", tokens);
+
+      // Get the new fund's address
+      const totalFunds = await fundFactory.getTotalFunds();
+      const [fundAddr] = await fundFactory.getFund(totalFunds - 1n);
+      testFund = (await ethers.getContractAt("Fund", fundAddr)) as Fund;
+
+      // ======== BUY FUND TOKENS ========
+      // Buy with 0.01 AVAX
+      const buyAmount = ethers.parseEther("0.01");
+      await testFund.connect(user2).buy({ value: buyAmount });
+
+      const balance = await testFund.balanceOf(user2.address);
+      expect(balance).to.be.gt(0);
+
+      // ======== SELL FUND TOKENS ========
+      // Approve and Sell all fund tokens
+      await testFund.connect(user2).approve(fundAddr, balance);
+      await testFund.connect(user2).sell(balance);
+      const finalBalance = await testFund.balanceOf(user2.address);
+      expect(finalBalance).to.equal(0);
     });
   });
 });
