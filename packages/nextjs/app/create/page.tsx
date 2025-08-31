@@ -100,7 +100,8 @@ const CreateFund: NextPage = () => {
       });
 
       // Create fund via smart contract
-      const contractResult = await createNewFund(fundName, ticker, tokenAddresses);
+      const weightagesPercent = selectedTokens.map(t => t.weight);
+      const contractResult = await createNewFund(fundName, ticker, tokenAddresses, weightagesPercent);
       console.log("contract result", contractResult);
 
       if (contractResult.success) {

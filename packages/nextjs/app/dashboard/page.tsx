@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import type { NextPage } from "next";
 import { useAccount } from "wagmi";
+import { getAvalancheFujiTokenAddresses, useFundContract } from "~~/hooks/useContracts";
 import { updateFundWeights, useUserFunds, useUserInvestments } from "~~/hooks/useSupabase";
 import { Fund, FundToken } from "~~/lib/supabase";
 
@@ -18,6 +19,8 @@ const CreatedFundCard = ({
   const [isRebalancing, setIsRebalancing] = useState(false);
   const [newWeights, setNewWeights] = useState<{ [tokenAddress: string]: number }>({});
   const [isUpdating, setIsUpdating] = useState(false);
+  const { rebalanceFund } = useFundContract(fund.fund_address);
+  const fujiTokens = getAvalancheFujiTokenAddresses();
 
   // Initialize weights from fund tokens
   const initializeWeights = () => {
@@ -56,6 +59,24 @@ const CreatedFundCard = ({
 
     setIsUpdating(true);
     try {
+      // Prepare tokens and weights for on-chain call
+      const tokensOrdered = (fund.fund_tokens || []).map(t => t.token_address);
+      const tokenAddrs: string[] = tokensOrdered.map(id => {
+        if (id?.startsWith("0x") && id.length === 42) return id;
+        const mapped = fujiTokens[(id as keyof typeof fujiTokens) || ("" as any)];
+        return mapped || id;
+      });
+      const weightsPercent = tokensOrdered.map(id => newWeights[id] ?? 0);
+
+      const res = await rebalanceFund(tokenAddrs as `0x${string}`[], weightsPercent);
+      if (!res.success) {
+        alert(`Rebalance failed: ${res.error}`);
+        return;
+      }
+
+      alert(`Fund rebalance successful! TX: ${res.txHash}`);
+
+      // Mirror new weights into Supabase for immediate UI consistency
       await updateFundWeights(fund.fund_address, newWeights);
       // Optimistically update local fund token weights for instant UI feedback
       if (fund.fund_tokens) {
@@ -66,10 +87,8 @@ const CreatedFundCard = ({
       }
       setIsRebalancing(false);
       onUpdated?.();
-      // TODO: Add success notification
     } catch (error) {
       console.error("Error updating fund weights:", error);
-      // TODO: Add error notification
     } finally {
       setIsUpdating(false);
     }
