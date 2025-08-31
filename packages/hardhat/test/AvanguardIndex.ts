@@ -72,30 +72,33 @@ describe("Avanguard Index", function () {
         "0xEa81F6972aDf76765Fd1435E119Acc0Aafc80BeA", // JOE
         "0xf4E0A9224e8827dE91050b528F34e2F99C82Fbf6", // UNI
       ];
+      const weightages = [5000, 5000]; // 50% each
 
       // Approve AGI tokens for fund creation
       await agiToken.connect(user1).approve(await fundFactory.getAddress(), ethers.parseEther("1000"));
 
       // Create fund
-      await fundFactory.connect(user1).createFund(fundName, fundTicker, tokens);
+      await fundFactory.connect(user1).createFund(fundName, fundTicker, tokens, weightages);
 
       // Check if fund was created
       const fundCount = await fundFactory.getTotalFunds();
       expect(fundCount).to.equal(1);
 
-      const [, name, ticker, underlyingTokens] = await fundFactory.getFund(0);
+      const [, name, ticker, underlyingTokens, fundWeightages] = await fundFactory.getFund(0);
       expect(name).to.equal(fundName);
       expect(ticker).to.equal(fundTicker);
       expect(underlyingTokens).to.deep.equal(tokens);
+      expect(fundWeightages).to.deep.equal(weightages);
     });
 
     it("Should require AGI tokens for fund creation", async function () {
       const fundName = "Test Fund";
       const fundTicker = "TEST";
       const tokens = ["0xEa81F6972aDf76765Fd1435E119Acc0Aafc80BeA"];
+      const weightages = [10000]; // 100%
 
       // Try to create fund without approving AGI tokens
-      await expect(fundFactory.connect(user2).createFund(fundName, fundTicker, tokens)).to.be.reverted;
+      await expect(fundFactory.connect(user2).createFund(fundName, fundTicker, tokens, weightages)).to.be.reverted;
     });
   });
 
@@ -114,9 +117,10 @@ describe("Avanguard Index", function () {
         "0xEa81F6972aDf76765Fd1435E119Acc0Aafc80BeA", // JOE
         "0xf4E0A9224e8827dE91050b528F34e2F99C82Fbf6", // UNI
       ];
+      const weightages = [5000, 5000]; // 50% each
 
       await agiToken.connect(user1).approve(await fundFactory.getAddress(), ethers.parseEther("1000"));
-      await fundFactory.connect(user1).createFund(fundName, fundTicker, tokens);
+      await fundFactory.connect(user1).createFund(fundName, fundTicker, tokens, weightages);
 
       const [fundAddress] = await fundFactory.getFund(0);
       testFund = (await ethers.getContractAt("Fund", fundAddress)) as Fund;
@@ -215,9 +219,10 @@ describe("Avanguard Index", function () {
 
       // Define underlying tokens for the fund
       const tokens = ["0x20C62EEde571409f7101076F8dA0221867AA46dc"]; // PNG
+      const weightages = [10000]; // 100% PNG
 
       // Create the fund
-      await fundFactory.connect(user1).createFund("Test Fund All Tokens", "TSTAT", tokens);
+      await fundFactory.connect(user1).createFund("Test Fund All Tokens", "TSTAT", tokens, weightages);
 
       // Get the new fund's address
       const totalFunds = await fundFactory.getTotalFunds();
