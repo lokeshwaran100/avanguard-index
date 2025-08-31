@@ -184,7 +184,7 @@ export const useFundContract = (fundAddress?: string) => {
   ] as const;
 
   // Read fund token balance for user
-  const { data: fundTokenBalance } = useReadContract({
+  const { data: fundTokenBalance, refetch: refetchBalance } = useReadContract({
     address: fundAddress as `0x${string}`,
     abi: fundABI,
     functionName: "balanceOf",
@@ -193,7 +193,7 @@ export const useFundContract = (fundAddress?: string) => {
   });
 
   // Read current fund value
-  const { data: currentFundValue } = useReadContract({
+  const { data: currentFundValue, refetch: refetchFundValue } = useReadContract({
     address: fundAddress as `0x${string}`,
     abi: fundABI,
     functionName: "getCurrentFundValue",
@@ -201,7 +201,7 @@ export const useFundContract = (fundAddress?: string) => {
   });
 
   // Read total supply
-  const { data: totalSupply } = useReadContract({
+  const { data: totalSupply, refetch: refetchTotalSupply } = useReadContract({
     address: fundAddress as `0x${string}`,
     abi: fundABI,
     functionName: "totalSupply",
@@ -222,6 +222,12 @@ export const useFundContract = (fundAddress?: string) => {
         functionName: "buy",
         value: parseEther(avaxAmount),
       });
+      // Wait briefly and refetch reads to update UI without reload
+      setTimeout(() => {
+        refetchBalance();
+        refetchFundValue();
+        refetchTotalSupply();
+      }, 500);
       return { success: true, txHash: result };
     } catch (error) {
       console.error("Error buying fund tokens:", error);
@@ -240,6 +246,11 @@ export const useFundContract = (fundAddress?: string) => {
         functionName: "sell",
         args: [parseEther(fundTokenAmount)],
       });
+      setTimeout(() => {
+        refetchBalance();
+        refetchFundValue();
+        refetchTotalSupply();
+      }, 500);
       return { success: true, txHash: result };
     } catch (error) {
       console.error("Error selling fund tokens:", error);
@@ -254,6 +265,11 @@ export const useFundContract = (fundAddress?: string) => {
     buyFundTokens,
     sellFundTokens,
     isBuyingTokens,
+    refresh: () => {
+      refetchBalance();
+      refetchFundValue();
+      refetchTotalSupply();
+    },
   };
 };
 

@@ -19,7 +19,7 @@ const FundDetail = (props: any) => {
   const { fund, loading } = useFund(params.id); // params.id is now the fund address
 
   // Get real contract data using the fund address
-  const { fundTokenBalance, currentFundValue, totalSupply, buyFundTokens, sellFundTokens, isBuyingTokens } =
+  const { fundTokenBalance, currentFundValue, totalSupply, buyFundTokens, sellFundTokens, isBuyingTokens, refresh } =
     useFundContract(params.id);
 
   if (loading) {
@@ -98,6 +98,8 @@ const FundDetail = (props: any) => {
 
       if (result.success) {
         setAmount("");
+        // ensure UI updates immediately
+        refresh();
       } else {
         alert(`Error: ${result.error}`);
       }
