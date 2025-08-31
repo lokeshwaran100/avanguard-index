@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { NextPage } from "next";
 import { useAccount } from "wagmi";
 import { PlusIcon } from "@heroicons/react/24/outline";
-import { getMockTokenAddresses, useAGIToken, useFundFactory } from "~~/hooks/useContracts";
+import { getAvalancheFujiTokenAddresses, useAGIToken, useFundFactory } from "~~/hooks/useContracts";
 import { createFund, createFundRecord } from "~~/hooks/useSupabase";
 
 const CreateFund: NextPage = () => {
@@ -17,8 +17,8 @@ const CreateFund: NextPage = () => {
   const { createNewFund, isCreatingFund } = useFundFactory();
   const { agiBalance, agiAllowance, approveAGIForFundCreation, isApprovingAGI } = useAGIToken();
 
-  // Get mock token addresses
-  const mockTokens = getMockTokenAddresses();
+  // Get real Avalanche Fuji token addresses
+  const fujiTokens = getAvalancheFujiTokenAddresses();
   const [tokens, setTokens] = useState([
     { address: "", symbol: "", weight: 20 },
     { address: "", symbol: "", weight: 20 },
@@ -90,7 +90,7 @@ const CreateFund: NextPage = () => {
 
       // Convert token symbols to addresses
       const tokenAddresses = selectedTokens.map(token => {
-        const address = mockTokens[token.symbol as keyof typeof mockTokens];
+        const address = fujiTokens[token.symbol as keyof typeof fujiTokens];
         if (!address) {
           throw new Error(`Unknown token: ${token.symbol}`);
         }
@@ -246,9 +246,13 @@ const CreateFund: NextPage = () => {
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="">Select token</option>
-                      <option value="USDC">USDC (Mock)</option>
-                      <option value="USDT">USDT (Mock)</option>
-                      <option value="WBTC">WBTC (Mock)</option>
+                      <option value="ELK">ELK</option>
+                      <option value="COW">COW</option>
+                      <option value="TUR">TUR (Turtle)</option>
+                      <option value="PNG">PNG</option>
+                      <option value="JOE">JOE (Joe Coin)</option>
+                      <option value="UNI">UNI (Uniswap)</option>
+                      <option value="SUSHI">SUSHI</option>
                     </select>
                   </div>
 
