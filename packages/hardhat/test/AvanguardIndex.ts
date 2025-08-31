@@ -84,7 +84,7 @@ describe("Avanguard Index", function () {
       const fundCount = await fundFactory.getTotalFunds();
       expect(fundCount).to.equal(1);
 
-      const [fundAddress, name, ticker, underlyingTokens, fundWeightages] = await fundFactory.getFund(0);
+      const [, name, ticker, underlyingTokens, fundWeightages] = await fundFactory.getFund(0);
       expect(name).to.equal(fundName);
       expect(ticker).to.equal(fundTicker);
       expect(underlyingTokens).to.deep.equal(tokens);

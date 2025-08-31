@@ -18,19 +18,19 @@ const deployAvanguardIndex: DeployFunction = async function (hre: HardhatRuntime
     existing PK which will fill DEPLOYER_PRIVATE_KEY_ENCRYPTED in the .env file (then used on hardhat.config.ts)
     You can run the `yarn account` command to check your balance in every network.
   */
-  
+
   console.log("🔍 Getting named accounts...");
   const namedAccounts = await hre.getNamedAccounts();
   console.log("📋 Named accounts:", namedAccounts);
-  
+
   const { deployer } = namedAccounts;
-  
+
   if (!deployer) {
     throw new Error("Deployer account is undefined. Check your hardhat configuration.");
   }
-  
+
   console.log("👤 Deployer address:", deployer);
-  
+
   const { deploy } = hre.deployments;
 
   console.log("🚀 Deploying Avanguard Index contracts...");

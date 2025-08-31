@@ -1,6 +1,6 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
-import { AGIToken, MockOracle, FundFactory, Fund, MockERC20 } from "../typechain-types";
+import { AGIToken, MockOracle, FundFactory, Fund } from "../typechain-types";
 
 describe("Weighted Fund Tests", function () {
   let fundFactory: FundFactory;
@@ -42,7 +42,7 @@ describe("Weighted Fund Tests", function () {
       await owner.getAddress(), // treasury
       fujiDexAddress, // dex
       fujiWavaxAddress, // wavax
-      await owner.getAddress() // initialOwner
+      await owner.getAddress(), // initialOwner
     );
     await fundFactory.waitForDeployment();
 
@@ -70,12 +70,7 @@ describe("Weighted Fund Tests", function () {
       await agiToken.connect(user1).approve(await fundFactory.getAddress(), ethers.parseEther("1000"));
 
       // Create fund
-      await fundFactory.connect(user1).createFund(
-        "Test Weighted Fund",
-        "TWF",
-        tokens,
-        weightages
-      );
+      await fundFactory.connect(user1).createFund("Test Weighted Fund", "TWF", tokens, weightages);
 
       // Get fund information
       const fundInfo = await fundFactory.getFund(0);
@@ -92,12 +87,7 @@ describe("Weighted Fund Tests", function () {
       await agiToken.connect(user1).approve(await fundFactory.getAddress(), ethers.parseEther("1000"));
 
       await expect(
-        fundFactory.connect(user1).createFund(
-          "Invalid Fund",
-          "IF",
-          tokens,
-          invalidWeightages
-        )
+        fundFactory.connect(user1).createFund("Invalid Fund", "IF", tokens, invalidWeightages),
       ).to.be.revertedWith("Total weightage must be 100%");
     });
 
@@ -108,12 +98,7 @@ describe("Weighted Fund Tests", function () {
       await agiToken.connect(user1).approve(await fundFactory.getAddress(), ethers.parseEther("1000"));
 
       await expect(
-        fundFactory.connect(user1).createFund(
-          "Mismatched Fund",
-          "MF",
-          tokens,
-          weightages
-        )
+        fundFactory.connect(user1).createFund("Mismatched Fund", "MF", tokens, weightages),
       ).to.be.revertedWith("Tokens and weightages length mismatch");
     });
   });
@@ -126,15 +111,10 @@ describe("Weighted Fund Tests", function () {
       const weightages = [4000, 3000, 3000]; // 40% JOE, 30% UNI, 30% PNG
 
       await agiToken.connect(user1).approve(await fundFactory.getAddress(), ethers.parseEther("1000"));
-      await fundFactory.connect(user1).createFund(
-        "Test Weighted Fund",
-        "TWF",
-        tokens,
-        weightages
-      );
+      await fundFactory.connect(user1).createFund("Test Weighted Fund", "TWF", tokens, weightages);
 
       const fundInfo = await fundFactory.getFund(0);
-      fund = await ethers.getContractAt("Fund", fundInfo.fundAddress) as Fund;
+      fund = (await ethers.getContractAt("Fund", fundInfo.fundAddress)) as Fund;
     });
 
     it("Should buy fund tokens with weighted allocation", async function () {
@@ -160,7 +140,7 @@ describe("Weighted Fund Tests", function () {
 
     it("Should sell fund tokens proportionally", async function () {
       const buyAmount = ethers.parseEther("10");
-      
+
       // Buy fund tokens first
       await fund.connect(user2).buy({ value: buyAmount });
       const initialBalance = await fund.balanceOf(await user2.getAddress());
@@ -186,7 +166,6 @@ describe("Weighted Fund Tests", function () {
 
       // Verify weightages were updated
       const result = await fund.getAllTokenWeightages();
-      const updatedTokens = result[0];
       const updatedWeightages = result[1];
       expect(updatedWeightages).to.deep.equal(newWeightages);
     });
@@ -233,8 +212,8 @@ describe("Weighted Fund Tests", function () {
     });
 
     it("Should validate weightages correctly", async function () {
-      const isValid = await fund.validateWeightages();
-      expect(isValid).to.be.true;
+      const isValid: boolean = await fund.validateWeightages();
+      expect(isValid).to.equal(true);
     });
 
     it("Should get fund composition", async function () {
@@ -245,11 +224,11 @@ describe("Weighted Fund Tests", function () {
       const tokens = result[0];
       const balances = result[1];
       const weightages = result[2];
-      
+
       expect(tokens.length).to.equal(3);
       expect(balances.length).to.equal(3);
       expect(weightages.length).to.equal(3);
-      
+
       // Check that all balances are greater than 0 after buying
       for (let i = 0; i < balances.length; i++) {
         expect(balances[i]).to.be.gt(0);
