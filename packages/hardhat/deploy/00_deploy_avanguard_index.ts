@@ -18,10 +18,28 @@ const deployAvanguardIndex: DeployFunction = async function (hre: HardhatRuntime
     existing PK which will fill DEPLOYER_PRIVATE_KEY_ENCRYPTED in the .env file (then used on hardhat.config.ts)
     You can run the `yarn account` command to check your balance in every network.
   */
-  const { deployer } = await hre.getNamedAccounts();
+  
+  console.log("🔍 Getting named accounts...");
+  const namedAccounts = await hre.getNamedAccounts();
+  console.log("📋 Named accounts:", namedAccounts);
+  
+  const { deployer } = namedAccounts;
+  
+  if (!deployer) {
+    throw new Error("Deployer account is undefined. Check your hardhat configuration.");
+  }
+  
+  console.log("👤 Deployer address:", deployer);
+  
   const { deploy } = hre.deployments;
 
   console.log("🚀 Deploying Avanguard Index contracts...");
+
+  // Use real Pangolin Router and WAVAX on Avalanche Fuji when targeting fuji
+  // https://docs.pangolin.exchange/
+  const isFuji = hre.network.name === "fuji";
+  const PANGOLIN_ROUTER = "0x2D99ABD9008Dc933ff5c0CD271B88309593aB921"; // Fuji Pangolin Router
+  const WAVAX_ADDRESS = "0xd00ae08403B9bbb9124bB305C09058E32C39A48c"; // Fuji WAVAX
 
   // Deploy AGI Token
   console.log("📝 Deploying AGI Token...");
@@ -32,7 +50,7 @@ const deployAvanguardIndex: DeployFunction = async function (hre: HardhatRuntime
     autoMine: true,
   });
 
-  // Deploy Mock Oracle
+  // Deploy Mock Oracle (used as price feed source)
   console.log("🔮 Deploying Mock Oracle...");
   const mockOracle = await deploy("MockOracle", {
     from: deployer,
@@ -41,20 +59,19 @@ const deployAvanguardIndex: DeployFunction = async function (hre: HardhatRuntime
     autoMine: true,
   });
 
-  // Deploy Mock DEX (for testing purposes)
-  console.log("🔄 Deploying Mock DEX...");
-  const mockDex = await deploy("MockDEX", {
-    from: deployer,
-    args: [mockOracle.address],
-    log: true,
-    autoMine: true,
-  });
-
   // Deploy Fund Factory
   console.log("🏭 Deploying Fund Factory...");
   const fundFactory = await deploy("FundFactory", {
     from: deployer,
-    args: [agiToken.address, mockOracle.address, deployer, mockDex.address, deployer],
+    // FundFactory(agi, oracle, treasury, dex, wavax, initialOwner)
+    args: [
+      agiToken.address,
+      mockOracle.address,
+      deployer,
+      isFuji ? PANGOLIN_ROUTER : PANGOLIN_ROUTER,
+      isFuji ? WAVAX_ADDRESS : WAVAX_ADDRESS,
+      deployer,
+    ],
     log: true,
     autoMine: true,
   });
@@ -85,7 +102,7 @@ const deployAvanguardIndex: DeployFunction = async function (hre: HardhatRuntime
   // Set some mock prices in the oracle
   console.log("💰 Setting mock token prices...");
   const oracleContract = await hre.ethers.getContract<Contract>("MockOracle", deployer);
-  
+
   // Set prices in USD with 8 decimals
   await oracleContract.setTokenPrice(mockUSDC.address, 100000000); // $1.00
   await oracleContract.setTokenPrice(mockUSDT.address, 100000000); // $1.00
@@ -94,7 +111,8 @@ const deployAvanguardIndex: DeployFunction = async function (hre: HardhatRuntime
   console.log("✅ Avanguard Index contracts deployed successfully!");
   console.log("📊 AGI Token:", agiToken.address);
   console.log("🔮 Mock Oracle:", mockOracle.address);
-  console.log("🔄 Mock DEX:", mockDex.address);
+  console.log("🔄 DEX Router:", PANGOLIN_ROUTER);
+  console.log("🌊 WAVAX:", WAVAX_ADDRESS);
   console.log("🏭 Fund Factory:", fundFactory.address);
   console.log("🪙 Mock USDC:", mockUSDC.address);
   console.log("🪙 Mock USDT:", mockUSDT.address);

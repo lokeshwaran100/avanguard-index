@@ -18,6 +18,7 @@ contract FundFactory is Ownable {
     address public oracle;
     address public treasury;
     address public dex;
+    address public wavax;
     
     // Fund tracking
     Fund[] public funds;
@@ -39,12 +40,21 @@ contract FundFactory is Ownable {
         address _oracle,
         address _treasury,
         address _dex,
+        address _wavax,
         address initialOwner
     ) Ownable(initialOwner) {
         agiToken = AGIToken(_agiToken);
         oracle = _oracle;
         treasury = _treasury;
         dex = _dex;
+        wavax = _wavax;
+    }
+
+    /**
+     * @dev Returns the fund creation fee.
+     */
+    function creationFee() external pure returns (uint256) {
+        return FUND_CREATION_FEE;
     }
     
     /**
@@ -95,7 +105,8 @@ contract FundFactory is Ownable {
             msg.sender,
             oracle,
             treasury,
-            dex
+            dex,
+            wavax
         );
         
         // Track the fund
@@ -211,5 +222,14 @@ contract FundFactory is Ownable {
     function updateDex(address newDex) external onlyOwner {
         require(newDex != address(0), "Invalid DEX address");
         dex = newDex;
+    }
+    
+    /**
+     * @dev Update WAVAX address (only owner)
+     * @param newWavax New WAVAX address
+     */
+    function updateWavax(address newWavax) external onlyOwner {
+        require(newWavax != address(0), "Invalid WAVAX address");
+        wavax = newWavax;
     }
 }

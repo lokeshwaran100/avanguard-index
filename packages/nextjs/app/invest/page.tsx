@@ -17,7 +17,7 @@ const Invest: NextPage = () => {
 
   // Transform real data to match UI expectations (with mock performance data for now)
   const funds = realFunds.map(fund => ({
-    id: fund.id,
+    id: fund.fund_address, // Use fund address as ID
     name: fund.name,
     creator: fund.creator_address.slice(0, 6) + "..." + fund.creator_address.slice(-4),
     category: "DeFi", // This could be derived from fund tokens or stored separately
@@ -28,6 +28,7 @@ const Invest: NextPage = () => {
     tvl: Math.random() * 5000000,
     description: `A diversified index fund created by ${fund.creator_address.slice(0, 6)}...`,
     ticker: fund.ticker,
+    fundAddress: fund.fund_address, // Add fund address for routing
   }));
 
   // Keep original mock data as fallback for demo

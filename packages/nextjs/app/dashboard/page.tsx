@@ -25,7 +25,7 @@ const Dashboard: NextPage = () => {
   // Transform data for display
   const myFunds = [
     ...createdFunds.map(fund => ({
-      id: fund.id,
+      id: fund.fund_address,
       name: fund.name,
       type: "Created" as const,
       value: Math.random() * 20000, // Mock value - would calculate from TVL
@@ -35,7 +35,7 @@ const Dashboard: NextPage = () => {
       ticker: fund.ticker,
     })),
     ...investments.map(inv => ({
-      id: inv.fund?.id || "",
+      id: inv.fund?.fund_address || "",
       name: inv.fund?.name || "Unknown Fund",
       type: "Invested" as const,
       value: (inv.share_balance || 0) * 12.34, // Mock price per share

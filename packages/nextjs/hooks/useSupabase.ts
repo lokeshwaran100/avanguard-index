@@ -111,13 +111,13 @@ export const useUserFunds = (userAddress?: string) => {
 };
 
 // Hook to get a specific fund with details
-export const useFund = (fundId?: string) => {
+export const useFund = (fundAddress?: string) => {
   const [fund, setFund] = useState<(Fund & { fund_tokens?: FundToken[] }) | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!fundId) {
+    if (!fundAddress) {
       setFund(null);
       setLoading(false);
       return;
@@ -133,7 +133,7 @@ export const useFund = (fundId?: string) => {
             fund_tokens (*)
           `,
           )
-          .eq("id", fundId)
+          .eq("fund_address", fundAddress)
           .single();
 
         if (error) throw error;
@@ -146,7 +146,7 @@ export const useFund = (fundId?: string) => {
     };
 
     fetchFund();
-  }, [fundId]);
+  }, [fundAddress]);
 
   return { fund, loading, error };
 };
@@ -192,8 +192,10 @@ export const useTransactions = (userAddress?: string) => {
   return { transactions, loading, error };
 };
 
-// Function to create a new fund
-export const createFund = async (
+// Function to create a new fund record in Supabase (called after smart contract creation)
+export const createFundRecord = async (
+  fundAddress: string,
+  fundId: number,
   creatorAddress: string,
   name: string,
   ticker: string,
@@ -207,14 +209,17 @@ export const createFund = async (
 
     if (userError) throw userError;
 
-    // Create the fund
+    // Create the fund record with actual contract address
     const { data: fundData, error: fundError } = await supabase
       .from("funds")
       .insert({
+        fund_address: fundAddress,
+        fund_id: fundId,
         creator_address: creatorAddress,
         name,
         ticker,
         agi_burned: 1000, // Fixed creation fee
+        underlying_tokens: tokens.map(t => t.symbol),
       })
       .select()
       .single();
@@ -223,7 +228,7 @@ export const createFund = async (
 
     // Create fund tokens
     const fundTokens = tokens.map(token => ({
-      fund_id: fundData.id,
+      fund_address: fundData.fund_address,
       token_address: token.symbol, // Using symbol as address for now
       weight_percentage: token.weight,
     }));
@@ -234,13 +239,27 @@ export const createFund = async (
 
     return { success: true, fund: fundData };
   } catch (error) {
-    console.error("Error creating fund:", error);
+    console.error("Error creating fund record:", error);
     return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
   }
 };
 
-// Function to invest in a fund
-export const investInFund = async (userAddress: string, fundId: string, amount: number) => {
+// Legacy function for backward compatibility (now just calls createFundRecord with mock data)
+export const createFund = async (
+  creatorAddress: string,
+  name: string,
+  ticker: string,
+  tokens: { symbol: string; weight: number }[],
+) => {
+  // This is now a fallback - should be replaced by createFundRecord
+  const mockFundAddress = `0x${Math.random().toString(16).substr(2, 40)}`;
+  const mockFundId = Math.floor(Math.random() * 1000000);
+
+  return createFundRecord(mockFundAddress, mockFundId, creatorAddress, name, ticker, tokens);
+};
+
+// Function to invest in a fund (will be updated to use smart contracts)
+export const investInFund = async (userAddress: string, fundAddress: string, amount: number) => {
   try {
     // Ensure user exists
     const { error: userError } = await supabase
@@ -254,7 +273,7 @@ export const investInFund = async (userAddress: string, fundId: string, amount: 
       .from("investments")
       .select("*")
       .eq("user_address", userAddress)
-      .eq("fund_id", fundId)
+      .eq("fund_address", fundAddress)
       .single();
 
     if (existingInvestment) {
@@ -272,7 +291,7 @@ export const investInFund = async (userAddress: string, fundId: string, amount: 
       // Create new investment
       const { error } = await supabase.from("investments").insert({
         user_address: userAddress,
-        fund_id: fundId,
+        fund_address: fundAddress,
         share_balance: amount,
       });
 
@@ -282,7 +301,7 @@ export const investInFund = async (userAddress: string, fundId: string, amount: 
     // Record transaction
     const { error: txError } = await supabase.from("transactions").insert({
       user_address: userAddress,
-      fund_id: fundId,
+      fund_address: fundAddress,
       txn_type: "buy",
       amount,
       fee_paid: amount * 0.01, // 1% fee
