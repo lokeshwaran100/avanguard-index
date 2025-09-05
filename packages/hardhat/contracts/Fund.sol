@@ -513,6 +513,14 @@ function sellUnderlyingTokens(uint256 sellPercentage) internal returns (uint256 
         uint256 currentFundValue = this.getCurrentFundValue();
         require(currentFundValue > 0, "No fund value to rebalance");
         
+        // Validate that all tokens have valid prices before proceeding
+        for (uint256 i = 0; i < tokens.length; i++) {
+            uint256 tokenPrice = IOracle(oracle).getPrice(tokens[i]);
+            require(tokenPrice > 0, "Invalid token price");
+        }
+        uint256 avaxPrice = IOracle(oracle).getPrice(address(0));
+        require(avaxPrice > 0, "Invalid AVAX price");
+        
         // Calculate target token balances based on new weightages
         uint256[] memory targetBalances = new uint256[](tokens.length);
         for (uint256 i = 0; i < tokens.length; i++) {
@@ -523,13 +531,8 @@ function sellUnderlyingTokens(uint256 sellPercentage) internal returns (uint256 
             uint256 tokenPriceUSD = IOracle(oracle).getPrice(token);
             uint256 avaxPriceUSD = IOracle(oracle).getPrice(address(0));
             
-            if (tokenPriceUSD > 0 && avaxPriceUSD > 0) {
-                // Calculate token amount: (targetValue * avaxPriceUSD) / tokenPriceUSD
-                targetBalances[i] = (targetValue * avaxPriceUSD) / tokenPriceUSD;
-            } else {
-                // Fallback: use target value directly
-                targetBalances[i] = targetValue;
-            }
+            // Calculate token amount: (targetValue * avaxPriceUSD) / tokenPriceUSD
+            targetBalances[i] = (targetValue * avaxPriceUSD) / tokenPriceUSD;
         }
         
         // Perform rebalancing using IPangolinRouter
