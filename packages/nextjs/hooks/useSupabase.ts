@@ -76,38 +76,40 @@ export const useUserFunds = (userAddress?: string) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const fetchUserFunds = async () => {
     if (!userAddress) {
       setFunds([]);
       setLoading(false);
       return;
     }
 
-    const fetchUserFunds = async () => {
-      try {
-        const { data, error } = await supabase
-          .from("funds")
-          .select(
-            `
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from("funds")
+        .select(
+          `
             *,
             fund_tokens (*)
           `,
-          )
-          .eq("creator_address", userAddress);
+        )
+        .eq("creator_address", userAddress);
 
-        if (error) throw error;
-        setFunds(data || []);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "An error occurred");
-      } finally {
-        setLoading(false);
-      }
-    };
+      if (error) throw error;
+      setFunds(data || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchUserFunds();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userAddress]);
 
-  return { funds, loading, error };
+  return { funds, loading, error, refetch: fetchUserFunds };
 };
 
 // Hook to get a specific fund with details
@@ -199,6 +201,7 @@ export const createFundRecord = async (
   creatorAddress: string,
   name: string,
   ticker: string,
+  description: string,
   tokens: { symbol: string; weight: number }[],
 ) => {
   try {
@@ -218,6 +221,7 @@ export const createFundRecord = async (
         creator_address: creatorAddress,
         name,
         ticker,
+        description,
         agi_burned: 1000, // Fixed creation fee
         underlying_tokens: tokens.map(t => t.symbol),
       })
@@ -249,13 +253,14 @@ export const createFund = async (
   creatorAddress: string,
   name: string,
   ticker: string,
+  description: string,
   tokens: { symbol: string; weight: number }[],
 ) => {
   // This is now a fallback - should be replaced by createFundRecord
   const mockFundAddress = `0x${Math.random().toString(16).substr(2, 40)}`;
   const mockFundId = Math.floor(Math.random() * 1000000);
 
-  return createFundRecord(mockFundAddress, mockFundId, creatorAddress, name, ticker, tokens);
+  return createFundRecord(mockFundAddress, mockFundId, creatorAddress, name, ticker, description, tokens);
 };
 
 // Function to invest in a fund (will be updated to use smart contracts)
@@ -312,6 +317,34 @@ export const investInFund = async (userAddress: string, fundAddress: string, amo
     return { success: true };
   } catch (error) {
     console.error("Error investing in fund:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+  }
+};
+
+// Function to update fund token weights (for rebalancing)
+export const updateFundWeights = async (fundAddress: string, newWeights: { [tokenAddress: string]: number }) => {
+  try {
+    // Update each token's weight in the fund_tokens table
+    const updates = Object.entries(newWeights).map(([tokenAddress, weight]) =>
+      supabase
+        .from("fund_tokens")
+        .update({ weight_percentage: weight })
+        .eq("fund_address", fundAddress)
+        .eq("token_address", tokenAddress),
+    );
+
+    // Execute all updates
+    const results = await Promise.all(updates);
+
+    // Check if any updates failed
+    const errors = results.filter(result => result.error);
+    if (errors.length > 0) {
+      throw new Error(`Failed to update ${errors.length} token weights`);
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error updating fund weights:", error);
     return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
   }
 };

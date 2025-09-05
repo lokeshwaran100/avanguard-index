@@ -20,17 +20,45 @@ export const useFundFactory = () => {
     functionName: "getTotalFunds",
   });
 
-  // Write function to create a fund
-  const { writeContractAsync: createFund, isPending: isCreatingFund } = useScaffoldWriteContract("FundFactory");
+  // We'll write with a minimal ABI to support the updated signature (with weightages)
+  const { writeContractAsync, isPending: isCreatingFund } = useWriteContract();
 
   // Function to create a new fund
-  const createNewFund = async (fundName: string, fundTicker: string, tokens: string[]) => {
+  const createNewFund = async (fundName: string, fundTicker: string, tokens: string[], weightagesPercent: number[]) => {
     if (!address) throw new Error("Wallet not connected");
 
     try {
-      const result = await createFund({
+      // Convert percentages [0-100] to basis points [0-10000]
+      const weightagesBps = weightagesPercent.map(w => Math.round(w * 100));
+      if (!fundFactory?.address) throw new Error("FundFactory address not found");
+      const fundFactoryAbi = [
+        {
+          inputs: [
+            { internalType: "string", name: "fundName", type: "string" },
+            { internalType: "string", name: "fundTicker", type: "string" },
+            { internalType: "address[]", name: "tokens", type: "address[]" },
+            { internalType: "uint256[]", name: "weightages", type: "uint256[]" },
+          ],
+          name: "createFund",
+          outputs: [],
+          stateMutability: "nonpayable",
+          type: "function",
+        },
+      ] as const;
+
+      console.log(
+        "fund inputs",
+        fundName,
+        fundTicker,
+        tokens as `0x${string}`[],
+        weightagesBps.map(w => BigInt(w)),
+      );
+
+      const result = await writeContractAsync({
+        address: fundFactory.address as `0x${string}`,
+        abi: fundFactoryAbi,
         functionName: "createFund",
-        args: [fundName, fundTicker, tokens] as const,
+        args: [fundName, fundTicker, tokens as `0x${string}`[], weightagesBps.map(w => BigInt(w))],
       });
 
       if (!result) {
@@ -175,6 +203,16 @@ export const useFundContract = (fundAddress?: string) => {
       type: "function",
     },
     {
+      inputs: [
+        { internalType: "address[]", name: "tokens", type: "address[]" },
+        { internalType: "uint256[]", name: "weightages", type: "uint256[]" },
+      ],
+      name: "rebalance",
+      outputs: [],
+      stateMutability: "nonpayable",
+      type: "function",
+    },
+    {
       inputs: [],
       name: "totalSupply",
       outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
@@ -184,7 +222,7 @@ export const useFundContract = (fundAddress?: string) => {
   ] as const;
 
   // Read fund token balance for user
-  const { data: fundTokenBalance } = useReadContract({
+  const { data: fundTokenBalance, refetch: refetchBalance } = useReadContract({
     address: fundAddress as `0x${string}`,
     abi: fundABI,
     functionName: "balanceOf",
@@ -193,7 +231,7 @@ export const useFundContract = (fundAddress?: string) => {
   });
 
   // Read current fund value
-  const { data: currentFundValue } = useReadContract({
+  const { data: currentFundValue, refetch: refetchFundValue } = useReadContract({
     address: fundAddress as `0x${string}`,
     abi: fundABI,
     functionName: "getCurrentFundValue",
@@ -201,7 +239,7 @@ export const useFundContract = (fundAddress?: string) => {
   });
 
   // Read total supply
-  const { data: totalSupply } = useReadContract({
+  const { data: totalSupply, refetch: refetchTotalSupply } = useReadContract({
     address: fundAddress as `0x${string}`,
     abi: fundABI,
     functionName: "totalSupply",
@@ -222,6 +260,12 @@ export const useFundContract = (fundAddress?: string) => {
         functionName: "buy",
         value: parseEther(avaxAmount),
       });
+      // Wait briefly and refetch reads to update UI without reload
+      setTimeout(() => {
+        refetchBalance();
+        refetchFundValue();
+        refetchTotalSupply();
+      }, 500);
       return { success: true, txHash: result };
     } catch (error) {
       console.error("Error buying fund tokens:", error);
@@ -240,9 +284,37 @@ export const useFundContract = (fundAddress?: string) => {
         functionName: "sell",
         args: [parseEther(fundTokenAmount)],
       });
+      setTimeout(() => {
+        refetchBalance();
+        refetchFundValue();
+        refetchTotalSupply();
+      }, 500);
       return { success: true, txHash: result };
     } catch (error) {
       console.error("Error selling fund tokens:", error);
+      return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+    }
+  };
+
+  // Function to rebalance fund weights (owner only)
+  const rebalanceFund = async (tokens: string[], weightagesPercent: number[]) => {
+    if (!address || !fundAddress) throw new Error("Wallet not connected or fund address missing");
+    try {
+      const weightagesBps = weightagesPercent.map(w => Math.round(w * 100));
+      const result = await writeContractAsync({
+        address: fundAddress as `0x${string}`,
+        abi: fundABI,
+        functionName: "rebalance",
+        args: [tokens as `0x${string}`[], weightagesBps.map(w => BigInt(w))],
+      });
+      setTimeout(() => {
+        refetchBalance();
+        refetchFundValue();
+        refetchTotalSupply();
+      }, 500);
+      return { success: true, txHash: result };
+    } catch (error) {
+      console.error("Error rebalancing fund:", error);
       return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
     }
   };
@@ -253,7 +325,13 @@ export const useFundContract = (fundAddress?: string) => {
     totalSupply: totalSupply ? Number(totalSupply) / 1e18 : 0,
     buyFundTokens,
     sellFundTokens,
+    rebalanceFund,
     isBuyingTokens,
+    refresh: () => {
+      refetchBalance();
+      refetchFundValue();
+      refetchTotalSupply();
+    },
   };
 };
 

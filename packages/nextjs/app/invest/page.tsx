@@ -240,14 +240,13 @@ const Invest: NextPage = () => {
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
                   <p className="text-sm text-gray-600">1Y Return</p>
-                  <p className={`font-semibold ${fund.yearReturn >= 0 ? "text-green-600" : "text-red-600"}`}>
-                    {fund.yearReturn >= 0 ? "+" : ""}
-                    {fund.yearReturn}%
+                  <p className={`font-semibold ${fund.yearReturn >= 0 ? "text-green-600" : "text-green-600"}`}>
+                    coming soon
                   </p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">APY</p>
-                  <p className="font-semibold">{fund.apy}%</p>
+                  <p className="font-semibold">coming soon</p>
                 </div>
               </div>
 

@@ -4,14 +4,184 @@ import { useState } from "react";
 import Link from "next/link";
 import type { NextPage } from "next";
 import { useAccount } from "wagmi";
-import { useUserFunds, useUserInvestments } from "~~/hooks/useSupabase";
+import { getAvalancheFujiTokenAddresses, useFundContract } from "~~/hooks/useContracts";
+import { updateFundWeights, useUserFunds, useUserInvestments } from "~~/hooks/useSupabase";
+import { Fund, FundToken } from "~~/lib/supabase";
+
+// Component for individual created fund cards with rebalance functionality
+const CreatedFundCard = ({
+  fund,
+  onUpdated,
+}: {
+  fund: Fund & { fund_tokens?: FundToken[] };
+  onUpdated?: () => void;
+}) => {
+  const [isRebalancing, setIsRebalancing] = useState(false);
+  const [newWeights, setNewWeights] = useState<{ [tokenAddress: string]: number }>({});
+  const [isUpdating, setIsUpdating] = useState(false);
+  const { rebalanceFund } = useFundContract(fund.fund_address);
+  const fujiTokens = getAvalancheFujiTokenAddresses();
+
+  // Initialize weights from fund tokens
+  const initializeWeights = () => {
+    if (!fund.fund_tokens) return;
+    const weights: { [tokenAddress: string]: number } = {};
+    fund.fund_tokens.forEach(token => {
+      weights[token.token_address] = token.weight_percentage;
+    });
+    setNewWeights(weights);
+  };
+
+  // Handle rebalance button click
+  const handleRebalanceClick = () => {
+    setIsRebalancing(true);
+    initializeWeights();
+  };
+
+  // Handle weight change
+  const handleWeightChange = (tokenAddress: string, value: string) => {
+    const numValue = parseFloat(value) || 0;
+    setNewWeights(prev => ({
+      ...prev,
+      [tokenAddress]: numValue,
+    }));
+  };
+
+  // Calculate total weight
+  const totalWeight = Object.values(newWeights).reduce((sum, weight) => sum + weight, 0);
+
+  // Handle save rebalance
+  const handleSaveRebalance = async () => {
+    if (Math.abs(totalWeight - 100) > 0.01) {
+      alert("Total weight must equal 100%");
+      return;
+    }
+
+    setIsUpdating(true);
+    try {
+      // Prepare tokens and weights for on-chain call
+      const tokensOrdered = (fund.fund_tokens || []).map(t => t.token_address);
+      const tokenAddrs: string[] = tokensOrdered.map(id => {
+        if (id?.startsWith("0x") && id.length === 42) return id;
+        const mapped = fujiTokens[(id as keyof typeof fujiTokens) || ("" as any)];
+        return mapped || id;
+      });
+      const weightsPercent = tokensOrdered.map(id => newWeights[id] ?? 0);
+
+      const res = await rebalanceFund(tokenAddrs as `0x${string}`[], weightsPercent);
+      if (!res.success) {
+        alert(`Rebalance failed: ${res.error}`);
+        return;
+      }
+
+      alert(`Fund rebalance successful! TX: ${res.txHash}`);
+
+      // Mirror new weights into Supabase for immediate UI consistency
+      await updateFundWeights(fund.fund_address, newWeights);
+      // Optimistically update local fund token weights for instant UI feedback
+      if (fund.fund_tokens) {
+        fund.fund_tokens = fund.fund_tokens.map(t => ({
+          ...t,
+          weight_percentage: newWeights[t.token_address] ?? t.weight_percentage,
+        }));
+      }
+      setIsRebalancing(false);
+      onUpdated?.();
+    } catch (error) {
+      console.error("Error updating fund weights:", error);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  // Cancel rebalancing
+  const handleCancelRebalance = () => {
+    setIsRebalancing(false);
+    setNewWeights({});
+  };
+
+  return (
+    <div className="border rounded-lg p-4 bg-gray-50">
+      <div className="flex justify-between items-start mb-3">
+        <div>
+          <h3 className="font-semibold text-lg">{fund.name}</h3>
+          <p className="text-sm text-gray-600">{fund.ticker}</p>
+        </div>
+        <div className="flex gap-2">
+          <Link href={`/fund/${fund.fund_address}`} className="text-blue-600 hover:text-blue-800 text-sm font-medium">
+            View
+          </Link>
+          {!isRebalancing && (
+            <button onClick={handleRebalanceClick} className="text-green-600 hover:text-green-800 text-sm font-medium">
+              Rebalance
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Token allocation display/edit */}
+      <div className="space-y-2">
+        <h4 className="text-sm font-medium text-gray-700">Token Allocation:</h4>
+        {fund.fund_tokens?.map(token => (
+          <div key={token.token_address} className="flex justify-between items-center">
+            <span className="text-sm">{token.token_address}</span>
+            {isRebalancing ? (
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  value={newWeights[token.token_address] || 0}
+                  onChange={e => handleWeightChange(token.token_address, e.target.value)}
+                  className="w-16 px-2 py-1 text-xs border rounded"
+                />
+                <span className="text-xs">%</span>
+              </div>
+            ) : (
+              <span className="text-sm font-medium">{token.weight_percentage}%</span>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Rebalance controls */}
+      {isRebalancing && (
+        <div className="mt-4 pt-3 border-t">
+          <div className="flex justify-between items-center mb-3">
+            <span className="text-sm font-medium">Total: {totalWeight.toFixed(1)}%</span>
+            <span className={`text-xs ${Math.abs(totalWeight - 100) < 0.01 ? "text-green-600" : "text-red-600"}`}>
+              {Math.abs(totalWeight - 100) < 0.01 ? "✓ Valid" : "⚠ Must equal 100%"}
+            </span>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={handleSaveRebalance}
+              disabled={Math.abs(totalWeight - 100) > 0.01 || isUpdating}
+              className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white py-2 px-3 rounded text-sm font-medium transition-colors"
+            >
+              {isUpdating ? "Updating..." : "Save"}
+            </button>
+            <button
+              onClick={handleCancelRebalance}
+              disabled={isUpdating}
+              className="flex-1 border border-gray-300 hover:bg-gray-50 text-gray-700 py-2 px-3 rounded text-sm font-medium transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 const Dashboard: NextPage = () => {
   const { isConnected, address } = useAccount();
   const [timeframe, setTimeframe] = useState("1W");
 
   // Get real data from Supabase
-  const { funds: createdFunds } = useUserFunds(address);
+  const { funds: createdFunds, refetch: refetchUserFunds } = useUserFunds(address);
   const { investments } = useUserInvestments(address);
 
   // Calculate portfolio data from real investments
@@ -125,32 +295,28 @@ const Dashboard: NextPage = () => {
         </div>
       </div>
 
-      {/* Asset Allocation & My Funds */}
+      {/* Created Funds & My Funds */}
       <div className="grid lg:grid-cols-2 gap-8">
-        {/* Asset Allocation */}
+        {/* Created Funds */}
         <div className="bg-white p-6 rounded-xl shadow-sm border">
-          <h2 className="text-xl font-semibold mb-6">Asset Allocation</h2>
+          <h2 className="text-xl font-semibold mb-6">Created Funds</h2>
 
-          {/* Placeholder for pie chart */}
-          <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center mb-4">
-            <p className="text-gray-500">Asset allocation chart will be displayed here</p>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex justify-between items-center">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 bg-blue-600 rounded-full"></div>
-                <span className="text-sm">Tech Index Fund</span>
+          <div className="space-y-4">
+            {createdFunds.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-gray-500 mb-4">You haven&apos;t created any funds yet.</p>
+                <Link
+                  href="/create"
+                  className="inline-block bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg text-sm font-medium transition-colors"
+                >
+                  Create Your First Fund
+                </Link>
               </div>
-              <span className="text-sm font-medium">65%</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                <span className="text-sm">My First Fund</span>
-              </div>
-              <span className="text-sm font-medium">35%</span>
-            </div>
+            ) : (
+              createdFunds.map(fund => (
+                <CreatedFundCard key={fund.fund_address} fund={fund} onUpdated={() => refetchUserFunds()} />
+              ))
+            )}
           </div>
         </div>
 
