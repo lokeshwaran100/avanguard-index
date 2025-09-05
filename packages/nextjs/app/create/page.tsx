@@ -3,7 +3,8 @@
 import { useState } from "react";
 import type { NextPage } from "next";
 import { useAccount } from "wagmi";
-import { PlusIcon } from "@heroicons/react/24/outline";
+import { CheckCircleIcon, DocumentDuplicateIcon, PlusIcon } from "@heroicons/react/24/outline";
+import { useCopyToClipboard } from "~~/hooks/scaffold-eth/useCopyToClipboard";
 import { getAvalancheFujiTokenAddresses, useAGIToken, useFundFactory } from "~~/hooks/useContracts";
 import { createFund, createFundRecord } from "~~/hooks/useSupabase";
 
@@ -11,11 +12,23 @@ const CreateFund: NextPage = () => {
   const { isConnected, address } = useAccount();
   const [fundName, setFundName] = useState("");
   const [ticker, setTicker] = useState("");
+  const [description, setDescription] = useState("");
   const [isCreating, setIsCreating] = useState(false);
+  const [showFaucet, setShowFaucet] = useState(false);
+  const [isClaiming, setIsClaiming] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [createdFundData, setCreatedFundData] = useState<{
+    name: string;
+    address: string;
+    txHash: string;
+  } | null>(null);
 
   // Contract hooks
   const { createNewFund, isCreatingFund } = useFundFactory();
   const { agiBalance, agiAllowance, approveAGIForFundCreation, isApprovingAGI } = useAGIToken();
+
+  // Copy functionality
+  const { copyToClipboard, isCopiedToClipboard } = useCopyToClipboard();
 
   // Get real Avalanche Fuji token addresses
   const fujiTokens = getAvalancheFujiTokenAddresses();
@@ -64,28 +77,27 @@ const CreateFund: NextPage = () => {
   };
 
   const handleCreateFund = async () => {
-    if (!address || !fundName || !ticker || getTotalWeight() !== 100) return;
+    if (!address || !fundName || !ticker || !description || getTotalWeight() !== 100) return;
 
     setIsCreating(true);
     try {
       const selectedTokens = tokens.filter(token => token.symbol);
 
-      // Check AGI balance and allowance
+      // Check AGI balance
       if (agiBalance < 1000) {
         alert("Insufficient AGI balance. You need 1000 AGI to create a fund.");
         return;
       }
 
-      // Check if AGI allowance is sufficient
+      // Auto-approve AGI if needed, then create fund
       if (agiAllowance < 1000) {
-        alert("Please approve AGI spending first.");
+        console.log("Approving AGI for fund creation...");
         const approveResult = await approveAGIForFundCreation();
         if (!approveResult.success) {
           alert(`Error approving AGI: ${approveResult.error}`);
           return;
         }
-        alert("AGI approved! Please try creating the fund again.");
-        return;
+        console.log("AGI approved successfully");
       }
 
       // Convert token symbols to addresses
@@ -98,7 +110,8 @@ const CreateFund: NextPage = () => {
       });
 
       // Create fund via smart contract
-      const contractResult = await createNewFund(fundName, ticker, tokenAddresses);
+      const weightagesPercent = selectedTokens.map(t => t.weight);
+      const contractResult = await createNewFund(fundName, ticker, tokenAddresses, weightagesPercent);
       console.log("contract result", contractResult);
 
       if (contractResult.success) {
@@ -110,21 +123,29 @@ const CreateFund: NextPage = () => {
             address,
             fundName,
             ticker,
+            description,
             selectedTokens,
           );
         } else {
           // Fallback to mock if event parsing fails
-          supabaseResult = await createFund(address, fundName, ticker, selectedTokens);
+          supabaseResult = await createFund(address, fundName, ticker, description, selectedTokens);
         }
 
         if (supabaseResult.success) {
           const finalAddress = contractResult.fundAddress || supabaseResult.fund?.fund_address || "unknown";
-          alert(
-            `Fund "${fundName}" created successfully!\nTransaction: ${contractResult.txHash}\nFund Address: ${finalAddress}`,
-          );
+
+          // Set success modal data
+          setCreatedFundData({
+            name: fundName,
+            address: finalAddress,
+            txHash: contractResult.txHash || "unknown",
+          });
+          setShowSuccessModal(true);
+
           // Reset form
           setFundName("");
           setTicker("");
+          setDescription("");
           setTokens([
             { address: "", symbol: "", weight: 20 },
             { address: "", symbol: "", weight: 20 },
@@ -144,6 +165,28 @@ const CreateFund: NextPage = () => {
       alert("An unexpected error occurred");
     } finally {
       setIsCreating(false);
+    }
+  };
+
+  const claimAgi = async () => {
+    if (!address) return;
+    try {
+      setIsClaiming(true);
+      const res = await fetch("/api/faucet", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: address, amount: "1500" }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert("Claim submitted! TX: " + data.txHash);
+      } else {
+        alert("Faucet error: " + data.error);
+      }
+    } catch {
+      alert("Faucet request failed");
+    } finally {
+      setIsClaiming(false);
     }
   };
 
@@ -170,7 +213,7 @@ const CreateFund: NextPage = () => {
         <div className="mb-8">
           <h2 className="text-xl font-semibold mb-4">Fund Details</h2>
 
-          <div className="grid md:grid-cols-2 gap-6">
+          <div className="grid md:grid-cols-2 gap-6 mb-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Fund Name</label>
               <input
@@ -193,6 +236,19 @@ const CreateFund: NextPage = () => {
                 maxLength={5}
               />
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+            <textarea
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              placeholder="Describe your fund's investment strategy and goals..."
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              maxLength={500}
+            />
+            <p className="text-xs text-gray-500 mt-1">{description.length}/500 characters</p>
           </div>
         </div>
 
@@ -285,7 +341,7 @@ const CreateFund: NextPage = () => {
           </div>
         </div>
 
-        {/* AGI Balance & Creation Fee */}
+        {/* AGI Balance & Faucet */}
         <div className="mb-8 space-y-4">
           <div className="p-4 bg-gray-50 rounded-lg">
             <div className="flex justify-between items-center">
@@ -302,6 +358,14 @@ const CreateFund: NextPage = () => {
             {agiBalance < 1000 && (
               <p className="text-red-600 text-sm mt-2">Insufficient AGI balance. You need 1000 AGI to create a fund.</p>
             )}
+            <div className="mt-3">
+              <button
+                onClick={() => setShowFaucet(true)}
+                className="px-3 py-2 bg-[#3B82F6] hover:bg-[#3B82F6]/80 text-white rounded-lg text-sm font-medium"
+              >
+                Claim 1500 AGI (Faucet)
+              </button>
+            </div>
           </div>
         </div>
 
@@ -311,6 +375,7 @@ const CreateFund: NextPage = () => {
           disabled={
             !fundName ||
             !ticker ||
+            !description ||
             tokens.some(t => !t.symbol) ||
             getTotalWeight() !== 100 ||
             isCreating ||
@@ -321,7 +386,122 @@ const CreateFund: NextPage = () => {
         >
           {isCreating || isCreatingFund ? "Creating Fund..." : isApprovingAGI ? "Approving AGI..." : "Create Fund"}
         </button>
+
+        <p className="text-sm text-gray-600 mt-2 text-center">
+          This will automatically approve AGI spending and create your fund in one transaction.
+        </p>
       </div>
+
+      {/* Faucet Modal */}
+      {showFaucet && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-lg w-full max-w-md p-6">
+            <h3 className="text-lg font-semibold mb-2">AGI Faucet</h3>
+            <p className="text-sm text-gray-600 mb-4">Claim 1500 AGI test tokens to create a fund.</p>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setShowFaucet(false)}
+                className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                disabled={isClaiming}
+              >
+                Close
+              </button>
+              <button
+                onClick={claimAgi}
+                disabled={isClaiming}
+                className="px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium disabled:bg-gray-300"
+              >
+                {isClaiming ? "Claiming..." : "Claim 1500 AGI"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Success Modal */}
+      {showSuccessModal && createdFundData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-lg w-full max-w-lg p-6">
+            <div className="text-center mb-6">
+              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 mb-4">
+                <CheckCircleIcon className="h-6 w-6 text-green-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Fund Created Successfully!</h3>
+              <p className="text-sm text-gray-600">
+                Your fund &quot;{createdFundData.name}&quot; has been created and deployed to the blockchain.
+              </p>
+            </div>
+
+            <div className="space-y-4 mb-6">
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm font-medium text-gray-700">Fund Address</span>
+                  <button
+                    onClick={() => copyToClipboard(createdFundData.address)}
+                    className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 rounded transition-colors"
+                  >
+                    {isCopiedToClipboard ? (
+                      <>
+                        <CheckCircleIcon className="h-3 w-3" />
+                        Copied!
+                      </>
+                    ) : (
+                      <>
+                        <DocumentDuplicateIcon className="h-3 w-3" />
+                        Copy
+                      </>
+                    )}
+                  </button>
+                </div>
+                <p className="text-sm font-mono text-gray-800 break-all">{createdFundData.address}</p>
+              </div>
+
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm font-medium text-gray-700">Transaction Hash</span>
+                  <button
+                    onClick={() => copyToClipboard(createdFundData.txHash)}
+                    className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 rounded transition-colors"
+                  >
+                    {isCopiedToClipboard ? (
+                      <>
+                        <CheckCircleIcon className="h-3 w-3" />
+                        Copied!
+                      </>
+                    ) : (
+                      <>
+                        <DocumentDuplicateIcon className="h-3 w-3" />
+                        Copy
+                      </>
+                    )}
+                  </button>
+                </div>
+                <p className="text-sm font-mono text-gray-800 break-all">{createdFundData.txHash}</p>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowSuccessModal(false);
+                  setCreatedFundData(null);
+                }}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium"
+              >
+                Close
+              </button>
+              <a
+                href={`https://testnet.snowtrace.io/address/${createdFundData.address}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium text-center"
+              >
+                View on Explorer
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
