@@ -3,7 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useAccount } from "wagmi";
-import { ArrowLeftIcon } from "@heroicons/react/24/outline";
+import { ArrowLeftIcon, CheckCircleIcon, DocumentDuplicateIcon } from "@heroicons/react/24/outline";
+import { useCopyToClipboard } from "~~/hooks/scaffold-eth/useCopyToClipboard";
 import { useFundContract } from "~~/hooks/useContracts";
 import { investInFund, useFund } from "~~/hooks/useSupabase";
 
@@ -22,6 +23,9 @@ const FundDetail = (props: any) => {
   // Get real contract data using the fund address
   const { fundTokenBalance, currentFundValue, totalSupply, buyFundTokens, sellFundTokens, isBuyingTokens, refresh } =
     useFundContract(params.id);
+
+  // Copy functionality
+  const { copyToClipboard, isCopiedToClipboard } = useCopyToClipboard();
 
   if (loading) {
     return (
@@ -52,7 +56,7 @@ const FundDetail = (props: any) => {
   const fundData = {
     id: fund.fund_address,
     name: fund.name,
-    description: `A diversified index fund created by ${fund.creator_address.slice(0, 6)}...`,
+    description: fund.description || `description not available creator: ${fund.creator_address.slice(0, 6)}`,
     creator: fund.creator_address.slice(0, 6) + "..." + fund.creator_address.slice(-4),
     tvl: currentFundValue * totalSupply, // Real TVL calculation
     currentPrice: totalSupply > 0 ? currentFundValue / totalSupply : 0, // Real price per share
@@ -126,6 +130,30 @@ const FundDetail = (props: any) => {
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-2">{fundData.name}</h1>
         <p className="text-gray-600 mb-4">{fundData.description}</p>
+
+        {/* Fund Address with Copy */}
+        <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+          <div className="flex-1">
+            <span className="text-sm font-medium text-gray-700">Fund Address: </span>
+            <span className="text-sm font-mono text-gray-800">{fundData.fundAddress}</span>
+          </div>
+          <button
+            onClick={() => copyToClipboard(fundData.fundAddress)}
+            className="flex items-center gap-1 px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg transition-colors text-sm font-medium"
+          >
+            {isCopiedToClipboard ? (
+              <>
+                <CheckCircleIcon className="h-4 w-4" />
+                Copied!
+              </>
+            ) : (
+              <>
+                <DocumentDuplicateIcon className="h-4 w-4" />
+                Copy Address
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Key Metrics */}

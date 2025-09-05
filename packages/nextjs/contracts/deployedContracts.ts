@@ -482,7 +482,7 @@ const deployedContracts = {
       deployedOnBlock: 45455962,
     },
     FundFactory: {
-      address: "0x573CF0E9d375876Afd399e79a08d70a861914440",
+      address: "0x80C048aD1d21C244f191dbF6187b43B22D2354Cd",
       abi: [
         {
           inputs: [
@@ -984,10 +984,10 @@ const deployedContracts = {
         renounceOwnership: "@openzeppelin/contracts/access/Ownable.sol",
         transferOwnership: "@openzeppelin/contracts/access/Ownable.sol",
       },
-      deployedOnBlock: 45470091,
+      deployedOnBlock: 45678085,
     },
     MockERC20: {
-      address: "0x40b7D11476441257a8344Ef35aCc2BC42e5BeFba",
+      address: "0xf8A033CdF12671CB29d9e37cb8CCEE9252BCb3eB",
       abi: [
         {
           inputs: [
@@ -1438,7 +1438,7 @@ const deployedContracts = {
         renounceOwnership: "@openzeppelin/contracts/access/Ownable.sol",
         transferOwnership: "@openzeppelin/contracts/access/Ownable.sol",
       },
-      deployedOnBlock: 45470105,
+      deployedOnBlock: 45678572,
     },
     MockOracle: {
       address: "0x3C8aFa3DB81119aE323DcDBeB92203ecfe9B8A76",

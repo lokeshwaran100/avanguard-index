@@ -19,6 +19,7 @@ export interface Fund {
   creator_address: string;
   name: string;
   ticker: string;
+  description?: string;
   creation_date?: string;
   agi_burned?: number;
   underlying_tokens?: string[]; // Array of token addresses

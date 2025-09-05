@@ -201,6 +201,7 @@ export const createFundRecord = async (
   creatorAddress: string,
   name: string,
   ticker: string,
+  description: string,
   tokens: { symbol: string; weight: number }[],
 ) => {
   try {
@@ -220,6 +221,7 @@ export const createFundRecord = async (
         creator_address: creatorAddress,
         name,
         ticker,
+        description,
         agi_burned: 1000, // Fixed creation fee
         underlying_tokens: tokens.map(t => t.symbol),
       })
@@ -251,13 +253,14 @@ export const createFund = async (
   creatorAddress: string,
   name: string,
   ticker: string,
+  description: string,
   tokens: { symbol: string; weight: number }[],
 ) => {
   // This is now a fallback - should be replaced by createFundRecord
   const mockFundAddress = `0x${Math.random().toString(16).substr(2, 40)}`;
   const mockFundId = Math.floor(Math.random() * 1000000);
 
-  return createFundRecord(mockFundAddress, mockFundId, creatorAddress, name, ticker, tokens);
+  return createFundRecord(mockFundAddress, mockFundId, creatorAddress, name, ticker, description, tokens);
 };
 
 // Function to invest in a fund (will be updated to use smart contracts)

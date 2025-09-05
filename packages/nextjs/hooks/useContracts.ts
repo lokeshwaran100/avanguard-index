@@ -45,6 +45,15 @@ export const useFundFactory = () => {
           type: "function",
         },
       ] as const;
+
+      console.log(
+        "fund inputs",
+        fundName,
+        fundTicker,
+        tokens as `0x${string}`[],
+        weightagesBps.map(w => BigInt(w)),
+      );
+
       const result = await writeContractAsync({
         address: fundFactory.address as `0x${string}`,
         abi: fundFactoryAbi,
